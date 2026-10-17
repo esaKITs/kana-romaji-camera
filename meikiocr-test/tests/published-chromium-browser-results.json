@@ -1,0 +1,38 @@
+[
+  {
+    "device": "android-layout",
+    "engine": "chromium 153.0.8010.0",
+    "realPhone": false,
+    "initialMs": 5918.799999999814,
+    "readyMs": 5211.600000000093,
+    "continuousMs": [
+      701.2999999998137,
+      732.7999999998137,
+      782.7999999998137
+    ],
+    "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
+    "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
+    "errors": [],
+    "uploads": 0,
+    "requests": 13,
+    "objectEpochAfterBlack": 1
+  },
+  {
+    "device": "iphone-layout",
+    "engine": "chromium 153.0.8010.0",
+    "realPhone": false,
+    "initialMs": 6169.100000000093,
+    "readyMs": 5411,
+    "continuousMs": [
+      764.6000000000931,
+      737,
+      720.2000000001863
+    ],
+    "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
+    "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
+    "errors": [],
+    "uploads": 0,
+    "requests": 13,
+    "objectEpochAfterBlack": 1
+  }
+]

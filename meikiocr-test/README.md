@@ -11,3 +11,5 @@ Tests: `npm test` runs adapter and migrated controller tests. The old fixed-inte
 See `tests/browser-results.json` and `REVIEW.md` for observed results and limits. Mobile viewport emulation is not Safari or real Android verification. Initial Internet download time, mobile memory/thermal pressure, real lenses/lighting, and long-session reliability remain unverified. License originals and the corresponding source are served from `licenses/NOTICE.html`.
 
 Deployment compatibility: the exact upstream client/worker and source maps are vendored in `vendor/meikiocr-web/` with upstream hashes/notices. NPM dependencies come only from the public registry; no GitHub Git dependency or private registry is required. This is the same code as the tested pinned package, and produced byte-identical runtime bundles after vendoring.
+
+Large Still/Focused variants are normalized below 4 million pixels before transfer, with separate exact x/y coordinate mapping back to the original image. Alignment scripts load asynchronously so their large OpenCV download does not gate camera controls or OCR initialization.

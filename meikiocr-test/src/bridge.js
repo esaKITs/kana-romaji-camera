@@ -19,16 +19,26 @@ export function snapshotToData(snapshot){
  }
  return {text:lines.map(l=>l.text).join('\n'),blocks:[{paragraphs:[{lines}]}]};
 }
-export function createAdapter(client,{onResult=()=>{},clock=()=>performance.now()}={}){
+export function createAdapter(client,{onResult=()=>{},clock=()=>performance.now(),maxPixels=4000000,canvasFactory=()=>document.createElement("canvas")}={}){
  let busy=false,disposed=false,serial=0;
  return {meiki:true,async setParameters(){/* Meiki detects text lines independently of Tesseract's PSM. */},
   async recognize(image){
    if(disposed)throw Error('OCR disposed');if(busy)throw Error('OCR busy');busy=true;
    try{
-    const rgba=image.getContext('2d',{willReadFrequently:true}).getImageData(0,0,image.width,image.height).data;
+    let frame=image;
+    if(image.width*image.height>maxPixels){
+     const scale=Math.sqrt(maxPixels/(image.width*image.height));frame=canvasFactory();
+     frame.width=Math.max(1,Math.floor(image.width*scale));frame.height=Math.max(1,Math.floor(image.height*scale));
+     frame.getContext('2d').drawImage(image,0,0,frame.width,frame.height);
+    }
+    const rgba=frame.getContext('2d',{willReadFrequently:true}).getImageData(0,0,frame.width,frame.height).data;
     const t=clock(),frameId='meiki-'+(++serial);
-    const snapshot=await client.scan({frameId,width:image.width,height:image.height,capturedAtMs:t,rgba:rgba.buffer.slice(rgba.byteOffset,rgba.byteOffset+rgba.byteLength)},{transfer:'move'});
+    let snapshot=await client.scan({frameId,width:frame.width,height:frame.height,capturedAtMs:t,rgba:rgba.buffer.slice(rgba.byteOffset,rgba.byteOffset+rgba.byteLength)},{transfer:'move'});
     if(disposed)throw Error('OCR disposed');if(snapshot.frameId!==frameId)throw Error('OCR frame mismatch');
+    if(frame!==image){
+     const sx=image.width/frame.width,sy=image.height/frame.height,map=b=>[b[0]*sx,b[1]*sy,b[2]*sx,b[3]*sy];
+     snapshot={...snapshot,width:image.width,height:image.height,lines:snapshot.lines.map(line=>({...line,box:map(line.box),glyphs:line.glyphs.map(glyph=>({...glyph,box:map(glyph.box)}))}))};
+    }
     onResult(snapshot,clock()-t);return {data:snapshotToData(snapshot)};
    }finally{busy=false;}
   },

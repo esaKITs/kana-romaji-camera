@@ -45,6 +45,8 @@ html=html.replace('Text recognition uses Tesseract OCR,','This independent exper
 html=html.replace('Tesseract.js 5 (Apache 2.0);','MeikiOCR Web (GPL-3.0-only), MeikiOCR models (LGPL-3.0), ONNX Runtime Web 1.30.0 (MIT);');
 html=html.replace('href="./LICENSE">MIT License','href="./licenses/NOTICE.html">Licenses &amp; source');
 html=html.replace('</footer>','<br>Independent MeikiOCR experiment · <a href="./licenses/NOTICE.html">Licenses &amp; corresponding source</a></footer>');
+// Alignment definitions tolerate late OpenCV initialization; never block OCR/UI on its large download.
+html=html.replaceAll('<script src="./vendor/','<script async src="./vendor/');
 await writeFile('index.html',html);
 await mkdir('.testing',{recursive:true});await writeFile('.testing/camera.html',html.replace('<script type="module" src="/src/main.js"></script>','<script>'+code+'</script>'));
 await build();

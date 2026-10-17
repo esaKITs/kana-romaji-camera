@@ -21,3 +21,9 @@ test('a single clear kana can reach the original renderer without waiting for a 
 test('appearance change invalidates old state before optical-flow early returns',async()=>{
  const {createRequire}=await import('node:module');const require=createRequire(import.meta.url),{load}=require('./controller/harness.cjs');const h=load();h.run('work.width=640;work.height=360;wc.fillStyle="white";wc.fillRect(0,0,640,360);referenceCanvas=work;referenceItems=[{text:"あ",box:{x0:10,y0:10,x1:30,y1:40}}];video.getContext("2d").fillStyle="black";video.getContext("2d").fillRect(0,0,640,360);flowPrepare=()=>true');assert.equal(h.run('flowLocate()'),null);assert.equal(h.run('lastRegistrationStatus'),'mismatch');
 });
+test('large Still variants stay within the provider pixel limit and map glyph coordinates back exactly',async()=>{
+ let sent,drawn=false;const large={width:2560,height:1920,getContext:()=>{throw Error('Never read the oversized input bitmap directly')}};
+ const factory=()=>{const c={width:0,height:0,getContext:()=>({drawImage:source=>{assert.equal(source,large);drawn=true},getImageData:()=>({data:new Uint8ClampedArray(c.width*c.height*4)})})};return c};
+ const a=createAdapter({scan:async f=>{sent=f;assert.ok(f.width*f.height<=4000000);return {...snapshot('あ',f.frameId),width:f.width,height:f.height}},dispose:async()=>{}},{canvasFactory:factory});
+ const result=await a.recognize(large),word=result.data.blocks[0].paragraphs[0].lines[0].words[0];assert.ok(drawn);assert.equal(word.bbox.x1,20*large.width/sent.width);assert.equal(word.bbox.y0,10*large.height/sent.height);assert.equal(word.bbox.y1,40*large.height/sent.height);assert.equal(sent.rgba.byteLength,sent.width*sent.height*4);
+});

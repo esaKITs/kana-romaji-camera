@@ -3,36 +3,36 @@
     "device": "android-layout",
     "engine": "chromium 153.0.8010.0",
     "realPhone": false,
-    "initialMs": 1754.1000000000931,
-    "readyMs": 1080,
+    "initialMs": 1874.2999999998137,
+    "readyMs": 1253.1000000000931,
     "continuousMs": [
-      745.3999999999069,
-      765.1000000000931,
-      728.9000000001397
+      708.7000000001863,
+      757.2000000001863,
+      752
     ],
     "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
     "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
     "errors": [],
     "uploads": 0,
-    "requests": 16,
+    "requests": 13,
     "objectEpochAfterBlack": 1
   },
   {
     "device": "iphone-layout",
     "engine": "chromium 153.0.8010.0",
     "realPhone": false,
-    "initialMs": 1774.8999999999069,
-    "readyMs": 1098.3000000000466,
+    "initialMs": 1933.1000000000931,
+    "readyMs": 1316.8999999999069,
     "continuousMs": [
-      736.8999999999069,
-      722.1999999999534,
-      762.1999999999534
+      743.5,
+      795.3999999999069,
+      785.2000000001863
     ],
     "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
     "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
     "errors": [],
     "uploads": 0,
-    "requests": 16,
+    "requests": 13,
     "objectEpochAfterBlack": 1
   }
 ]
