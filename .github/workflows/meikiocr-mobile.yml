@@ -1,0 +1,28 @@
+name: Build MeikiOCR mobile test
+on:
+  workflow_dispatch:
+  push:
+    branches: [meikiocr-mobile-experiment]
+    paths: ['meikiocr-test/**', '.github/workflows/meikiocr-mobile.yml']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install and build MeikiOCR
+        working-directory: meikiocr-test
+        run: npm install && npm run build
+      - name: Fetch verified models and export runtime assets
+        working-directory: meikiocr-test
+        run: |
+          npm --prefix node_modules/meikiocr-web run fetch-models
+          npm --prefix node_modules/meikiocr-web run export-assets
+          mkdir -p dist/ocr-assets
+          cp -R node_modules/meikiocr-web/assets-export/. dist/ocr-assets/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meikiocr-mobile-test
+          path: meikiocr-test/dist
