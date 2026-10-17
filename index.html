@@ -683,7 +683,8 @@ async function retryLargeLines(data,items){
  finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
  return best;
 }
-async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;const myId=runId;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame();const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
+let scanRequested=false;
+async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanRequested=false;const myId=runId;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame();const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
  // Trial: re-recognize up to two larger lines without changing the baseline OCR result unless better.
  if(active&&myId===runId)items=await retryLargeLines(result.data,items);
  if(!active||myId!==runId)return;
@@ -707,6 +708,26 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;const
    if(scoreItems(largeItems)>scoreItems(items)+2)items=largeItems;
   }catch(e){console.warn('Large kana retry unavailable:',e)}
   finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
+ }
+ // White kana on black packaging: Tesseract may miss reversed-polarity lines.
+ // On alternate scans, OCR an inverted copy and add only non-overlapping kana regions.
+ if(active&&myId===runId&&scanNumber%2===0){
+  try{
+   const inverted=document.createElement('canvas');inverted.width=work.width;inverted.height=work.height;
+   const ic=inverted.getContext('2d',{willReadFrequently:true});
+   ic.drawImage(work,0,0);
+   const image=ic.getImageData(0,0,inverted.width,inverted.height);
+   for(let p=0;p<image.data.length;p+=4){image.data[p]=255-image.data[p];image.data[p+1]=255-image.data[p+1];image.data[p+2]=255-image.data[p+2]}
+   ic.putImageData(image,0,0);
+   const invertedResult=await worker.recognize(inverted,{}, {text:true,blocks:true});
+   if(!active||myId!==runId)return;
+   const reverseItems=rebuildRows(extract(invertedResult.data));
+   for(const candidate of reverseItems){
+    const b=candidate.box,cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
+    const overlaps=items.some(it=>{const q=it.box;return cx>=q.x0&&cx<=q.x1&&cy>=q.y0&&cy<=q.y1});
+    if(!overlaps&&candidate.confidence>=35)items.push(candidate);
+   }
+  }catch(e){console.warn('Reverse-polarity OCR unavailable:',e)}
  }
  // One extra rotated OCR pass only when the primary scan finds little usable text.
  // Alternate angles across scans to keep the iPhone workload bounded.
@@ -743,7 +764,7 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;const
  }else{
   lastFrame=frameSignature;
  }
- progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){progressStep('');$('status').textContent='Recognition error: '+e.message}finally{busy=false;if(active&&myId===runId)setTimeout(scan,200)}}
+ progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){progressStep('');$('status').textContent='Recognition error: '+e.message}finally{busy=false;if(active&&myId===runId)setTimeout(scan,scanRequested?0:200)}}
 $('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;hasShownLabels=false;sharedLabelColor=null;runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
-$('stop').onclick=()=>{active=false;runId++;resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};$('scan').onclick=()=>{if(!busy)scan()};
+$('stop').onclick=()=>{active=false;runId++;resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};$('scan').onclick=()=>{if(!active)return;scanRequested=true;referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);$('status').textContent='Rescanning…';if(!busy)scan()};
 </script></html>
