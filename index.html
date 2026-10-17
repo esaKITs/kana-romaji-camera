@@ -683,7 +683,7 @@ async function retryLargeLines(data,items){
  finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
  return best;
 }
-let scanRequested=false;
+let scanRequested=false,reverseScanCount=0;
 async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanRequested=false;const myId=runId;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame();const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
  // Trial: re-recognize up to two larger lines without changing the baseline OCR result unless better.
  if(active&&myId===runId)items=await retryLargeLines(result.data,items);
@@ -711,7 +711,7 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanR
  }
  // White kana on black packaging: Tesseract may miss reversed-polarity lines.
  // On alternate scans, OCR an inverted copy and add only non-overlapping kana regions.
- if(active&&myId===runId&&scanNumber%2===0){
+ if(active&&myId===runId&&++reverseScanCount%3===1){
   try{
    const inverted=document.createElement('canvas');inverted.width=work.width;inverted.height=work.height;
    const ic=inverted.getContext('2d',{willReadFrequently:true});
