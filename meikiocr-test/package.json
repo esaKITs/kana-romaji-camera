@@ -5,7 +5,8 @@
     "build": "vite build"
   },
   "dependencies": {
-    "meikiocr-web": "github:bee-san/meikiocr-web#dev",
-    "vite": "^7.1.0"
+    "meikiocr-web": "github:bee-san/meikiocr-web",
+    "vite": "^7.1.0",
+    "wanakana": "^5.3.1"
   }
 }
