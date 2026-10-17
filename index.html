@@ -972,8 +972,8 @@ function enterStill(){
  wc.drawImage(stillSource,0,0,work.width,work.height);
  sharedLabelColor=null;
  stillItems=transferToStill(stillSource);
- if(stillItems.length){captureSharedLabelColor(stillSource,stillItems);paint(stillItems)}
  resetTracking();referenceCanvas=null;referenceItems=[];tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);
+ if(stillItems.length){captureSharedLabelColor(stillSource,stillItems);paint(stillItems)}
  stillStatus('Refining recognition…');stillButton();if(!busy)setTimeout(stillScan,0);
 }
 function exitStill(){
