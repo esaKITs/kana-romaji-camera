@@ -1053,7 +1053,7 @@ stage.addEventListener('pointerup',event=>{
  if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)return;
  const x=(event.clientX-r.left)/r.width,y=(event.clientY-r.top)/r.height;
  focusRequest={x,y,id:++focusSerial,run:runId};
- const marker=$('focus-marker');marker.style.left='calc('+ (x*100) +'% - 18px)';marker.style.top='calc('+ (y*100) +'% - 18px)';marker.style.width='36px';marker.style.height='36px';marker.classList.add('active');
+ const marker=$('focus-marker');const stageRect=stage.getBoundingClientRect();marker.style.left=(event.clientX-stageRect.left-18)+'px';marker.style.top=(event.clientY-stageRect.top-18)+'px';marker.style.width='36px';marker.style.height='36px';marker.classList.add('active');
  $('status').textContent='Focused scan queued…';progressStep('Focused scan queued…');
  if(stillMode){stillStale=0;if(!stillBusy&&!stillPaused)setTimeout(stillScan,0)}else if(!busy)setTimeout(scan,0);
 });
