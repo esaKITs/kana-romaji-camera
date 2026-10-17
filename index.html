@@ -357,34 +357,41 @@ function lineAligned(items){
  return aligned.concat(items.filter(it=>!valid.includes(it)));
 }
 
-let sharedLabelColor=null;
-function captureSharedLabelColor(canvas,items){
- if(sharedLabelColor)return;
- // Select one representative paper color from the text regions, rather than
- // from dark areas outside the printed page. Freeze it until camera restart.
- const colors=(items||[]).filter(it=>it.box).map(it=>sampledPaperColor(it.box,canvas));
- if(colors.length){
-  sharedLabelColor=[0,1,2].map(channel=>{
-   const values=colors.map(color=>color[channel]).sort((a,b)=>a-b);
-   return values[Math.floor(values.length/2)];
-  });
-  return;
- }
- sharedLabelColor=[245,245,245];
-}
-
+// Sample only the original text region. Whole RGB samples preserve the
+// actual paper color; per-channel quantiles can mix unrelated ink colors.
 function sampledPaperColor(b,image=work){
  if(!image.width||!image.height)return [245,245,245];
  const x0=Math.max(0,Math.floor(b.x0)),x1=Math.min(image.width,Math.ceil(b.x1));
  const y0=Math.max(0,Math.floor(b.y0)),y1=Math.min(image.height,Math.ceil(b.y1));
  if(x1<=x0||y1<=y0)return [245,245,245];
  const pixels=image.getContext('2d',{willReadFrequently:true}).getImageData(x0,y0,x1-x0,y1-y0).data;
- const samples=[[],[],[]],w=x1-x0,h=y1-y0;
- for(let y=0;y<h;y+=Math.max(1,Math.floor(h/5)))for(let x=0;x<w;x+=Math.max(1,Math.floor(w/12))){
-  if(y>h*.26&&y<h*.74&&x>w*.08&&x<w*.92)continue;
-  const k=(y*w+x)*4;for(let c=0;c<3;c++)samples[c].push(pixels[k+c]);
+ const w=x1-x0,h=y1-y0,samples=[],bins=new Map();
+ for(let row=0;row<Math.min(16,h);row++)for(let col=0;col<Math.min(40,w);col++){
+  const y=Math.min(h-1,Math.floor((row+.5)*h/Math.min(16,h))),x=Math.min(w-1,Math.floor((col+.5)*w/Math.min(40,w)));
+  const k=(y*w+x)*4;if(pixels[k+3]<128)continue;
+  const rgb=[pixels[k],pixels[k+1],pixels[k+2]],key=rgb.map(v=>v>>5).join(',');
+  samples.push(rgb);const bin=bins.get(key)||{count:0,sum:[0,0,0]};
+  bin.count++;rgb.forEach((v,c)=>bin.sum[c]+=v);bins.set(key,bin);
  }
- return samples.map(v=>{if(!v.length)return 245;v.sort((a,b)=>a-b);return v[Math.floor(v.length*.65)]});
+ if(!samples.length)return [245,245,245];
+ let paper=[];
+ for(const bin of [...bins.values()].sort((a,b)=>b.count-a.count).slice(0,8)){
+  const center=bin.sum.map(v=>v/bin.count);
+  const cluster=samples.filter(rgb=>rgb.reduce((v,c,i)=>v+(c-center[i])**2,0)<35**2);
+  if(cluster.length>paper.length)paper=cluster;
+ }
+ return [0,1,2].map(c=>Math.round(paper.reduce((sum,rgb)=>sum+rgb[c],0)/Math.max(1,paper.length)));
+}
+const labelColorImage=document.createElement('canvas');
+function currentLabelImage(image){
+ // Live boxes have already been projected into the CURRENT frame. Sampling
+ // the OCR work image at these coordinates would sample a different location.
+ const source=stillMode&&stillSource?stillSource:video;
+ const scale=Math.min(1,640/Math.max(image.width,image.height));
+ labelColorImage.width=Math.max(1,Math.round(image.width*scale));
+ labelColorImage.height=Math.max(1,Math.round(image.height*scale));
+ labelColorImage.getContext('2d').drawImage(source,0,0,labelColorImage.width,labelColorImage.height);
+ return labelColorImage;
 }
 
 function romajiLayout(output,width,height,unit,fontCap=Infinity){
@@ -457,11 +464,12 @@ function paint(items){
   if(obstruction>c.bandW*c.bandH*.08){console.debug('[Label skipped: overlap]',c.output);continue;}
   accepted.push({...c,x,y,rect});
  }
+ const colorImage=accepted.length?currentLabelImage(image):null;
+ const colorScaleX=colorImage?colorImage.width/image.width:1,colorScaleY=colorImage?colorImage.height/image.height:1;
  for(const c of accepted){
   ctx.save();ctx.translate(c.x,c.y);
   ctx.font='700 '+c.font+'px system-ui';
-  // Every label shares the color captured on the first successful scan.
-  const paper=sharedLabelColor||[245,245,245];ctx.fillStyle='rgb('+paper.join(',')+')';
+  const paper=sampledPaperColor({x0:c.source.x0*colorScaleX,y0:c.source.y0*colorScaleY,x1:c.source.x1*colorScaleX,y1:c.source.y1*colorScaleY},colorImage);ctx.fillStyle='rgb('+paper.join(',')+')';
   ctx.fillRect(-c.bandW/2,-c.bandH/2,c.bandW,c.bandH);
   const brightness=(paper[0]*.299+paper[1]*.587+paper[2]*.114);ctx.fillStyle=brightness>145?'#15212a':'#ffffff';ctx.textAlign='center';
   c.lines.forEach((line,i)=>ctx.fillText(line,0,(i-(c.lines.length-1)/2)*c.font*1.05));
@@ -575,7 +583,7 @@ function motionRegistration(source,target,motion){
 function resetObjectState(){
  objectEpoch++;runId++;cancelPendingFreeze();clearFocus();$('recognized').textContent='';
  sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};
- protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];previousItems=[];lastFrame=null;sharedLabelColor=null;
+ protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];previousItems=[];lastFrame=null;
  flowReset();ctx.clearRect(0,0,overlay.width,overlay.height);
  if(!stillMode){stillFrame.classList.remove('visible');stillFrame.getContext('2d').clearRect(0,0,stillFrame.width,stillFrame.height)}
 }
@@ -1118,7 +1126,6 @@ async function stillScan(){
    const found=rebuildRows(extract(result.data,variant.canvas)).map(it=>({...it,box:{x0:it.box.x0*source.width/variant.canvas.width,y0:it.box.y0*source.height/variant.canvas.height,x1:it.box.x1*source.width/variant.canvas.width,y1:it.box.y1*source.height/variant.canvas.height}}));
    const changed=stillMerge(stillItems,found,'still-'+generation);
    stillStale=changed?0:stillStale+1;
-   if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
    rememberRecognition(source,stillItems,'still-frame');
    paint(stillItems);
   }
@@ -1188,10 +1195,9 @@ function freezeCurrentFrame(){
  // video by hiding it and then capture its old decoded frame on the next scan.
  stillFrame.classList.add('visible');video.style.visibility='visible';
  // Do not mutate the work canvas owned by an in-flight Live scan.
- sharedLabelColor=null;
  stillItems=transferToStill(stillSource);
  resetTracking();referenceCanvas=null;referenceItems=[];tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);
- if(stillItems.length){captureSharedLabelColor(stillSource,stillItems);paint(stillItems)}
+ if(stillItems.length)paint(stillItems);
  stillStatus('Refining recognition…');stillButton();if(!busy&&!stillBusy)setTimeout(stillScan,0);
 }
 function exitStill(){
@@ -1213,7 +1219,6 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
    const difference=captureFrame&&current?captureFrame.reduce((v,x,i)=>v+Math.abs(x-current[i]),0)/captureFrame.length:0;
    const initialValidation=motionRegistration(scanCapture,cameraSnapshot(),motion);
    if(initialValidation.status==='verified'){
-    captureSharedLabelColor(scanCapture,initial);
     referenceCanvas=scanCapture;referenceItems=initial.map(it=>({...it,box:{...it.box}}));flowReset();
     tracks=motion?initial.map(it=>({...it,box:moveBox(it.box,motion)})):initial;
     protectedKana=initial.map(it=>({...it,box:{...it.box}}));historyLastVerified=performance.now();
@@ -1316,7 +1321,6 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
  // Never attach history to a different page without a verified image transform.
  if((items.length||oldProjected.length)&&canPlace){
   const captureItems=protectRecognized(items,oldProjected,evidenceGroup);
-  captureSharedLabelColor(scanCapture,items);
   referenceCanvas=scanCapture;
   referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
   rememberRecognition(scanCapture,captureItems,'live-frame');
@@ -1330,7 +1334,7 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
   if(!historyFresh){protectedKana=[];kanaHistory=[]}
  }
  if(myId!==runId)return;progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,focusRequest?0:200)}}}}
-$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();hasShownLabels=false;sharedLabelColor=null;protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
+$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();hasShownLabels=false;protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
 $('stop').onclick=()=>{if(stillMode)exitStill();resetZoom();active=false;runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
 function focusImagePoint(clientX,clientY){
