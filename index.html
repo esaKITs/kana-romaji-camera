@@ -347,35 +347,19 @@ function lineAligned(items){
 }
 
 let sharedLabelColor=null;
-function captureSharedLabelColor(canvas){
+function captureSharedLabelColor(canvas,items){
  if(sharedLabelColor)return;
- // Identify the dominant background color cluster, not the average brightness.
- // A light printed glyph on dark paper must not brighten the label background.
- const sample=document.createElement('canvas');sample.width=96;sample.height=72;
- const sc=sample.getContext('2d',{willReadFrequently:true});
- sc.drawImage(canvas,0,0,sample.width,sample.height);
- const d=sc.getImageData(0,0,sample.width,sample.height).data;
- const bins=new Map();
- for(let y=0;y<sample.height;y++)for(let x=0;x<sample.width;x++){
-  const k=(y*sample.width+x)*4,r=d[k],g=d[k+1],b=d[k+2];
-  // Quantize RGB to preserve colored backgrounds without averaging text into them.
-  const key=((r>>4)<<8)|((g>>4)<<4)|(b>>4);
-  let bin=bins.get(key);
-  if(!bin){bin={count:0,r:0,g:0,b:0};bins.set(key,bin)}
-  bin.count++;bin.r+=r;bin.g+=g;bin.b+=b;
+ // Select one representative paper color from the text regions, rather than
+ // from dark areas outside the printed page. Freeze it until camera restart.
+ const colors=(items||[]).filter(it=>it.box).map(it=>sampledPaperColor(it.box));
+ if(colors.length){
+  sharedLabelColor=[0,1,2].map(channel=>{
+   const values=colors.map(color=>color[channel]).sort((a,b)=>a-b);
+   return values[Math.floor(values.length/2)];
+  });
+  return;
  }
- const ranked=[...bins.values()].sort((a,b)=>b.count-a.count);
- if(!ranked.length){sharedLabelColor=[245,245,245];return}
- // The most frequent color family is the background candidate.
- // Merge only neighboring bins to reduce camera noise; do not mix white ink.
- const dominant=ranked[0],base=[dominant.r/dominant.count,dominant.g/dominant.count,dominant.b/dominant.count];
- let count=0,r=0,g=0,b=0;
- for(const bin of ranked){
-  const mean=[bin.r/bin.count,bin.g/bin.count,bin.b/bin.count];
-  if(Math.max(...mean.map((v,i)=>Math.abs(v-base[i])))>25)continue;
-  count+=bin.count;r+=bin.r;g+=bin.g;b+=bin.b;
- }
- sharedLabelColor=count?[Math.round(r/count),Math.round(g/count),Math.round(b/count)]:base.map(Math.round);
+ sharedLabelColor=[245,245,245];
 }
 
 function sampledPaperColor(b){
@@ -442,8 +426,8 @@ function paint(items){
  for(const c of accepted){
   ctx.save();ctx.translate(c.x,c.y);
   ctx.font='700 '+c.font+'px system-ui';
-  // Use the local paper around each OCR box, not a single frozen color from the first camera frame.
-  const paper=sampledPaperColor(c.source);ctx.fillStyle='rgb('+paper.join(',')+')';
+  // Every label shares the color captured on the first successful scan.
+  const paper=sharedLabelColor||[245,245,245];ctx.fillStyle='rgb('+paper.join(',')+')';
   ctx.fillRect(-c.bandW/2,-c.bandH/2,c.bandW,c.bandH);
   const brightness=(paper[0]*.299+paper[1]*.587+paper[2]*.114);ctx.fillStyle=brightness>145?'#15212a':'#ffffff';ctx.textAlign='center';
   ctx.fillText(c.output,0,0);
@@ -745,7 +729,7 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;const
  // Never display capture-time OCR coordinates on a substantially changed live frame.
  // Only publish a tracking reference when capture-to-live alignment is verified.
  if(items.length&&canPlace){
-  captureSharedLabelColor(scanCapture);
+  captureSharedLabelColor(scanCapture,items);
   referenceCanvas=scanCapture;
   referenceItems=items.map(it=>({...it,box:{...it.box}}));
   flowReset();
