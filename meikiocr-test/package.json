@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "meikiocr-web": "github:bee-san/meikiocr-web#dev",
+    "vite": "^7.1.0"
+  }
+}
