@@ -774,6 +774,11 @@ function mergeKanaEvidence(old,it){
  if(it.text.includes(old.text)&&it.text.length>old.text.length)return {...it,votes:1,observations:2,state:'pending'};
  return kanaEvidence(it)>kanaEvidence(old)+.14?{...it,votes:1}:old;
 }
+function inverseMotion(m){
+ const det=m.A*m.A+m.B*m.B;
+ if(!Number.isFinite(det)||det<.0001)return null;
+ return {A:m.A/det,B:-m.B/det,tx:-(m.A*m.tx+m.B*m.ty)/det,ty:(m.B*m.tx-m.A*m.ty)/det};
+}
 function protectRecognized(items,oldProjected){
  const next=[],matched=new Set();
  for(const it of items){
@@ -876,7 +881,8 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanR
     // Undo capture-to-current motion before merging or publishing a new reference.
     oldProjected=protectedKana.map(it=>{
      const liveBox=flowWarpBox(it.box,transform);
-     return liveBox?{...it,box:elapsedMotion?moveBox(liveBox,{dx:-(elapsedMotion.dx||0),dy:-(elapsedMotion.dy||0)}):liveBox}:null;
+     const back=elapsedMotion?inverseMotion(elapsedMotion):null;
+     return liveBox&&(!elapsedMotion||back)?{...it,box:back?moveBox(liveBox,back):liveBox}:null;
     }).filter(Boolean);
    }
   }catch(e){console.warn('Protected text reprojection unavailable:',e)}
