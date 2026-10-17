@@ -1037,14 +1037,55 @@ async function stillScan(){
   }
  }
 }
+let pendingFreeze=null;
+function cancelPendingFreeze(){
+ const request=pendingFreeze;if(!request)return;
+ pendingFreeze=null;clearTimeout(request.timer);clearTimeout(request.poll);
+ if(request.callback!==null&&video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(request.callback);
+ $('scan').disabled=!active;
+}
 function enterStill(){
+ if(!active||stillMode||pendingFreeze)return;
+ // A decoded frame may still belong to the previous object after returning
+ // from Still. Freeze only after the visible camera presents another frame.
+ video.style.visibility='visible';
+ const supportsCallback=typeof video.requestVideoFrameCallback==='function';
+ const initialTime=video.currentTime;
+ // Non-video sources used by the deterministic canvas harness have no clock.
+ if(!supportsCallback&&!Number.isFinite(initialTime)){freezeCurrentFrame();return}
+ const request={run:runId,callback:null,timer:null,poll:null};pendingFreeze=request;
+ $('scan').disabled=true;
+ const fail=message=>{
+  if(pendingFreeze!==request)return;
+  cancelPendingFreeze();if(active&&request.run===runId)$('status').textContent=message;
+ };
+ const ready=()=>{
+  if(pendingFreeze!==request)return;
+  const valid=active&&!stillMode&&request.run===runId;
+  cancelPendingFreeze();if(valid)freezeCurrentFrame();
+ };
+ request.timer=setTimeout(()=>fail('Camera frame not ready · Try scanning again'),2000);
+ if(supportsCallback)request.callback=video.requestVideoFrameCallback(ready);
+ else{
+  const poll=()=>{
+   if(pendingFreeze!==request)return;
+   if(video.currentTime>initialTime&&video.readyState>=2)ready();
+   else request.poll=setTimeout(poll,30);
+  };
+  request.poll=setTimeout(poll,30);
+ }
+ if(video.paused)video.play().catch(e=>fail('Unable to resume camera: '+e.message));
+}
+function freezeCurrentFrame(){
  if(!active||stillMode)return;
  stillMode=true;stage.style.touchAction='none';stillGeneration++;runId++;stillPending=true;scanVisual='working';stillError=false;focusedScanning=false;stillPaused=false;stillPass=0;stillStale=0;stillImproved=0;stillUncertain=0;clearFocus();stillItems=[];analysisControls();
  const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
  stillSource=document.createElement('canvas');stillSource.width=Math.round(video.videoWidth*scale);stillSource.height=Math.round(video.videoHeight*scale);
  stillSource.getContext('2d').drawImage(video,0,0,stillSource.width,stillSource.height);
  stillFrame.width=stillSource.width;stillFrame.height=stillSource.height;stillFrame.getContext('2d').drawImage(stillSource,0,0);
- stillFrame.classList.add('visible');video.style.visibility='hidden';
+ // Keep the camera playing underneath the frozen canvas; do not suspend the
+ // video by hiding it and then capture its old decoded frame on the next scan.
+ stillFrame.classList.add('visible');video.style.visibility='visible';
  // Do not mutate the work canvas owned by an in-flight Live scan.
  sharedLabelColor=null;
  stillItems=transferToStill(stillSource);
@@ -1056,7 +1097,7 @@ function exitStill(){
  if(!stillMode)return;
  if(stillSource&&stillItems.length)rememberRecognition(stillSource,stillItems,'still-frame');
  stillMode=false;stage.style.touchAction='manipulation';stillGeneration++;runId++;stillPending=false;stillPaused=false;focusedScanning=false;stillItems=[];stillSource=null;clearFocus();analysisControls();
- stillFrame.classList.remove('visible');video.style.visibility='visible';stillStatus('');
+ stillFrame.classList.remove('visible');stillFrame.getContext('2d').clearRect(0,0,stillFrame.width,stillFrame.height);video.style.visibility='visible';stillStatus('');
  protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);
  // Resume live tracking from the still image, but only after image registration succeeds.
  if(sharedRecognition.source==='still-frame'&&sharedRecognition.items.length){referenceCanvas=sharedRecognition.canvas;referenceItems=sharedRecognition.items.map(it=>({...it,box:{...it.box}}));protectedKana=referenceItems.map(it=>({...it,box:{...it.box}}));historyLastVerified=performance.now();flowReset();}
@@ -1186,7 +1227,7 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
  }
  if(myId!==runId)return;progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,focusRequest?0:200)}}}}
 $('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();hasShownLabels=false;sharedLabelColor=null;protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
-$('stop').onclick=()=>{if(stillMode)exitStill();resetZoom();active=false;runId++;manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
+$('stop').onclick=()=>{if(stillMode)exitStill();resetZoom();active=false;runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
 function focusImagePoint(clientX,clientY){
  const r=stage.getBoundingClientRect(),p=zoomPoint(clientX,clientY);

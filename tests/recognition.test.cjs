@@ -195,3 +195,27 @@ test('short kana retain the original confidence and independent-vote confirmatio
  h.run('low=evidenceMerge(low,low,"live-2");high=evidenceMerge(high,high,"live-2")');assert.equal(h.run('low.state'),'provisional');assert.equal(h.run('high.state'),'provisional');
  h.run('high=evidenceMerge(high,high,"live-3")');assert.equal(h.run('high.state'),'confirmed');
 });
+
+test('Still capture waits for a fresh presented camera frame instead of the previous black package',()=>{
+ const h=setup();let callback;h.get('video').requestVideoFrameCallback=fn=>{callback=fn;return 7};h.get('video').cancelVideoFrameCallback=()=>{};
+ h.run('video.getContext("2d").fillStyle="black";video.getContext("2d").fillRect(0,0,640,360);enterStill()');
+ assert.equal(h.run('stillMode'),false);assert.equal(h.get('scan').disabled,true);
+ h.run('video.getContext("2d").fillStyle="white";video.getContext("2d").fillRect(0,0,640,360)');callback();
+ assert.equal(h.run('stillMode'),true);assert.equal(h.run('stillSource.getContext("2d").getImageData(1,1,1,1).data[0]'),255);assert.equal(h.get('video').style.visibility,'visible');
+});
+test('returning to Live erases the old frozen image pixels',()=>{
+ const h=setup();h.run('enterStill();exitStill()');assert.equal(h.run('stillFrame.getContext("2d").getImageData(1,1,1,1).data[3]'),0);assert.equal(h.get('still-frame').classList.contains('visible'),false);
+});
+test('missing fresh camera frame fails visibly without reusing a stale image',()=>{
+ const h=setup();h.get('video').requestVideoFrameCallback=()=>7;h.get('video').cancelVideoFrameCallback=()=>{};h.run('enterStill()');
+ const timeout=[...h.timers.values()].find(t=>t.delay===2000);assert.ok(timeout);timeout.fn();
+ assert.equal(h.run('stillMode'),false);assert.equal(h.run('pendingFreeze'),null);assert.match(h.get('status').textContent,/Camera frame not ready/);assert.equal(h.get('scan').disabled,false);
+});
+test('stopping the camera cancels a pending freeze and rejects its late frame',()=>{
+ const h=setup();let callback,cancelled;h.get('video').requestVideoFrameCallback=fn=>{callback=fn;return 7};h.get('video').cancelVideoFrameCallback=id=>{cancelled=id};h.run('enterStill()');h.get('stop').onclick();callback();
+ assert.equal(cancelled,7);assert.equal(h.run('stillMode'),false);assert.equal(h.run('pendingFreeze'),null);assert.equal(h.get('scan').disabled,true);
+});
+test('clock fallback waits for video time to advance',()=>{
+ const h=setup();h.get('video').currentTime=10;h.get('video').readyState=4;h.run('enterStill()');assert.equal(h.run('stillMode'),false);
+ h.get('video').currentTime=10.04;[...h.timers.values()].find(t=>t.delay===30).fn();assert.equal(h.run('stillMode'),true);
+});
