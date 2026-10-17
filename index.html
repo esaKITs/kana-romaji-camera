@@ -641,7 +641,7 @@ async function selectiveKleeRetry(items,myId){
  if(!uncertain.length||++kleeScanCount%3!==1)return items;
  try{
   if(!kleeWorker){
-   const modelBase=new URL('./models/',location.href).href;
+   const modelBase='https://esakits.github.io/japanese-flashcards/kana-camera-overlay-30/models/';
    kleeWorker=await Tesseract.createWorker('klee_jpn',1,{langPath:modelBase,gzip:false});
    await kleeWorker.setParameters({tessedit_pageseg_mode:'11'});
   }
