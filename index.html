@@ -712,6 +712,18 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;const
   const fineItems=rebuildRows(extract(alternative.data));
   if(scoreItems(fineItems)>scoreItems(items))items=fineItems;
  }
+ // Large isolated kana may be missed by sparse-text segmentation (PSM 11).
+ // Retry the same unmodified frame as a single text line; accept only a clear gain.
+ if(scoreItems(items)<8&&active&&myId===runId){
+  try{
+   await worker.setParameters({tessedit_pageseg_mode:'7'});
+   const largeResult=await worker.recognize(work,{}, {text:true,blocks:true});
+   if(!active||myId!==runId)return;
+   const largeItems=rebuildRows(extract(largeResult.data));
+   if(scoreItems(largeItems)>scoreItems(items)+2)items=largeItems;
+  }catch(e){console.warn('Large kana retry unavailable:',e)}
+  finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
+ }
  // One extra rotated OCR pass only when the primary scan finds little usable text.
  // Alternate angles across scans to keep the iPhone workload bounded.
  if(items.length<2&&active&&myId===runId){
