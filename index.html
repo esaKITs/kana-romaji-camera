@@ -389,7 +389,7 @@ function paint(items){
   const b=item.displayBox||item.box,w=b.x1-b.x0,h=b.y1-b.y0;
   // OCR boxes spanning implausibly wide character cells can conceal kanji.
   const glyphCount=[...item.text].length;
-  if(glyphCount&&w/Math.max(1,h*glyphCount)>1.75)continue;
+  if(!item.focused&&glyphCount&&w/Math.max(1,h*glyphCount)>1.75)continue;
   if(w<3||h<4)continue;
   if(!kanaOnly.test(item.text))continue;
   const output=contextualRomaji(item.text);
@@ -405,10 +405,10 @@ function paint(items){
    width=ctx.measureText(output).width;
   }
   // If the word still cannot fit, do not cover the adjacent text.
-  if(width+pad*2>allowedWidth*1.08)continue;
+  if(!item.focused&&width+pad*2>allowedWidth*1.08)continue;
   const bandW=w,bandH=h;
   const cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
-  candidates.push({output,font,bandW,bandH,cx,cy,source:b,score:item.text.length*3+(item.locked?8:0)+(item.rubyKanji?100:0)+(item.confidence||0)*.03});
+  candidates.push({output,font,bandW,bandH,cx,cy,source:b,score:(item.focused?10000:0)+item.text.length*3+(item.locked?8:0)+(item.rubyKanji?100:0)+(item.confidence||0)*.03});
  }
  candidates.sort((a,b)=>b.score-a.score);
  const accepted=[];
@@ -823,8 +823,8 @@ function stillButton(){const b=$('scan');b.hidden=stillMode;b.style.display=stil
 function clearFocus(){focusRequest=null;$('focus-marker').classList.remove('active')}
 function focusCrop(image,request){
  const w=image.width,h=image.height,x=request.x*w,y=request.y*h,sel=request.selection;
- const cropW=sel?Math.min(w,Math.max(30,(sel.x1-sel.x0)*w+Math.max(12,w*.025))):Math.min(w,Math.max(w*.42,220));
- const cropH=sel?Math.min(h,Math.max(32,(sel.y1-sel.y0)*h+Math.max(22,h*.035))):Math.min(h,Math.max(h*.13,65));
+ const cropW=sel?Math.min(w,Math.max(48,(sel.x1-sel.x0)*w+Math.max(30,w*.035))):Math.min(w,Math.max(w*.42,220));
+ const cropH=sel?Math.min(h,Math.max(48,(sel.y1-sel.y0)*h+Math.max(48,h*.085))):Math.min(h,Math.max(h*.13,65));
  const centerX=sel?(sel.x0+sel.x1)*w/2:x,centerY=sel?(sel.y0+sel.y1)*h/2:y;
  const x0=Math.max(0,Math.min(w-cropW,centerX-cropW/2)),y0=Math.max(0,Math.min(h-cropH,centerY-cropH/2));
  const canvas=document.createElement('canvas');canvas.width=Math.round(cropW*2);canvas.height=Math.round(cropH*2);
@@ -876,13 +876,14 @@ function evidenceMerge(old,candidate,group){
 function stillMerge(items,newItems,group='still-frame'){
  let updates=0;
  for(const candidate of newItems){
-  if(!candidate.box||!kanaOnly.test(candidate.text)||candidate.confidence<24)continue;
+  if(!candidate.box||!kanaOnly.test(candidate.text)||(!candidate.focused&&candidate.confidence<24))continue;
   const matches=items.filter(it=>sameKanaRegion(it,candidate));
   if(!matches.length){
    const support={[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence||50}};
    items.push({...candidate,support,source:group,state:'pending',votes:1});updates++;continue;
   }
   const best=matches.find(it=>it.state==='confirmed')||matches[0];
+  if(best.focused&&!candidate.focused)continue;
   const next=evidenceMerge(best,candidate,group);
   if(next.text!==best.text)updates++;
   items.splice(items.indexOf(best),1,next);
@@ -902,7 +903,7 @@ function stillImageVariant(source,variant){
 async function stillScan(){
  if(!active||!stillMode||stillPaused||busy||stillBusy||!stillSource)return;
  stillPending=false;stillBusy=true;stillError=false;stillButton();
- const generation=stillGeneration,source=stillSource;
+ const generation=stillGeneration,source=stillSource;let focusedScanFailure=false;
  try{
   if(!worker){stillStatus('Preparing Japanese OCR…');if(!window.Tesseract)throw Error('OCR library unavailable');worker=await Tesseract.createWorker('jpn',1)}
   if(!stillMode||generation!==stillGeneration)return;
@@ -921,8 +922,38 @@ async function stillScan(){
      const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
      if(!stillMode||generation!==stillGeneration||stillPaused||focusRequest)break;
      const scale=crop.scale*variant.factor;
-     const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>(request.selection?((it.box.x0+it.box.x1)/2/source.width>=request.selection.x0-.02&&(it.box.x0+it.box.x1)/2/source.width<=request.selection.x1+.02):true)&&Math.abs((it.box.y0+it.box.y1)/2-targetY)<band);
-     stillMerge(stillItems,found,'focused-frame');
+     let raw=extract(result.data);
+     // Some Tesseract builds return line text without word/symbol boxes.
+     // Use actual OCR text as a fallback, never an invented transcription.
+     if(!raw.length&&result.data.text){
+      const runs=[...result.data.text.matchAll(/[ぁ-ゖァ-ヺー]+/g)];
+      if(runs.length===1){
+       const t=runs[0][0],cw=variant.canvas.width,ch=variant.canvas.height;
+       raw=[{text:t,confidence:35,box:{x0:cw*.06,y0:ch*.10,x1:cw*.94,y1:ch*.90}}];
+      }
+     }
+     const found=rebuildRows(raw).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>{
+      const cx=(it.box.x0+it.box.x1)/2,cy=(it.box.y0+it.box.y1)/2;
+      return cx>=crop.region.x0-2&&cx<=crop.region.x1+2&&cy>=crop.region.y0-2&&cy<=crop.region.y1+2;
+     });
+     if(found.length){
+      focusedScanFailure=false;
+      // Explicit selection has priority over previous automatic guesses in this region.
+      const region=request.selection?{x0:request.selection.x0*source.width,x1:request.selection.x1*source.width,y0:crop.region.y0,y1:crop.region.y1}:crop.region;
+      for(const candidate of found){
+       if(!kanaOnly.test(candidate.text))continue;
+       candidate.focused=true;candidate.state='provisional';
+       const idx=stillItems.findIndex(old=>sameKanaRegion(old,candidate)&&old.state!=='confirmed');
+       if(idx>=0)stillItems.splice(idx,1);
+      }
+      stillMerge(stillItems,found,'focused-frame');
+      // Keep the user-selected OCR result visible even when other OCR passes disagree.
+      for(const candidate of found){
+       const match=stillItems.find(it=>it.text===candidate.text&&sameKanaRegion(it,candidate));
+       if(match)match.focused=true;
+      }
+     }
+     if(pass===2&&!found.length&&stillMode){focusedScanFailure=true;stillStatus('No kana detected in selection · Try a wider selection')}
      if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
      paint(stillItems);
     }
@@ -947,7 +978,7 @@ async function stillScan(){
    paint(stillItems);
   }
   if(stillMode&&generation===stillGeneration){
-   stillStatus(stillPaused?'Analysis paused':stillStale>=6?'Automatic analysis finished (no new candidates)':'Automatic analysis finished');
+   if(!focusedScanFailure)stillStatus(stillPaused?'Analysis paused':stillStale>=6?'Automatic analysis finished (no new candidates)':'Automatic analysis finished');
   }
  }catch(e){if(stillMode&&generation===stillGeneration){stillError=true;stillStatus('Scan error: '+e.message)}}
  finally{
@@ -1129,7 +1160,10 @@ async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy
 $('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();hasShownLabels=false;sharedLabelColor=null;protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
 $('stop').onclick=()=>{if(stillMode)exitStill();resetZoom();active=false;runId++;manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
-function focusImagePoint(clientX,clientY){const r=video.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(clientX-r.left)/Math.max(1,r.width))),y:Math.max(0,Math.min(1,(clientY-r.top)/Math.max(1,r.height)))}} 
+function focusImagePoint(clientX,clientY){
+ const r=stage.getBoundingClientRect(),p=zoomPoint(clientX,clientY);
+ return {x:Math.max(0,Math.min(1,p.x/Math.max(1,r.width))),y:Math.max(0,Math.min(1,p.y/Math.max(1,r.height)))};
+} 
 function focusSwipeVisual(a,b){const marker=$('focus-marker'),r=stage.getBoundingClientRect();const x0=Math.min(a.x,b.x)-r.left,x1=Math.max(a.x,b.x)-r.left,y0=Math.min(a.y,b.y)-r.top,y1=Math.max(a.y,b.y)-r.top;marker.style.left=x0+'px';marker.style.top=(y0-12)+'px';marker.style.width=Math.max(12,x1-x0)+'px';marker.style.height=Math.max(28,y1-y0+24)+'px';marker.classList.add('active')}
 stage.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;if(stillMode&&pointers.size===0)swipeFocus={id:e.pointerId,start:{x:e.clientX,y:e.clientY},end:{x:e.clientX,y:e.clientY}};else if(pointers.size===1)swipeFocus=null;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});pointerStarts.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===2){const a=[...pointers.values()];pinchStart={distance:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),zoom,zoomX,zoomY};dragStart=null;lastGestureAt=Date.now()}else if(pointers.size===1&&zoom>1)dragStart={x:e.clientX,y:e.clientY,zoomX,zoomY}});
 stage.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});const origin=pointerStarts.get(e.pointerId);if(origin&&Math.hypot(e.clientX-origin.x,e.clientY-origin.y)>9)pointerMoved.add(e.pointerId);if(stillMode&&swipeFocus&&swipeFocus.id===e.pointerId&&pointers.size===1){swipeFocus.end={x:e.clientX,y:e.clientY};if(Math.hypot(e.clientX-swipeFocus.start.x,e.clientY-swipeFocus.start.y)>12)focusSwipeVisual(swipeFocus.start,swipeFocus.end)}if(pointers.size===2&&pinchStart){const a=[...pointers.values()];zoom=Math.min(5,Math.max(1,pinchStart.zoom*Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)/Math.max(1,pinchStart.distance)));applyZoom();lastGestureAt=Date.now()}else if(pointers.size===1&&dragStart&&!swipeFocus){zoomX=dragStart.zoomX+e.clientX-dragStart.x;zoomY=dragStart.zoomY+e.clientY-dragStart.y;applyZoom();lastGestureAt=Date.now()}});
@@ -1144,7 +1178,7 @@ stage.addEventListener('pointerup',event=>{
  if(wasDrag&&!swipe)return;
  const r=video.getBoundingClientRect();
  if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)return;
- const x=(event.clientX-r.left)/r.width,y=(event.clientY-r.top)/r.height;
+ const point=focusImagePoint(event.clientX,event.clientY),x=point.x,y=point.y;
  let selection=null;
  if(stillMode&&swipe&&Math.hypot(event.clientX-swipe.start.x,event.clientY-swipe.start.y)>24){
   const p=focusImagePoint(swipe.start.x,swipe.start.y),q=focusImagePoint(event.clientX,event.clientY);
@@ -1153,7 +1187,7 @@ stage.addEventListener('pointerup',event=>{
  }else{
   const marker=$('focus-marker'),r=stage.getBoundingClientRect();marker.style.left=(event.clientX-r.left-18)+'px';marker.style.top=(event.clientY-r.top-18)+'px';marker.style.width='36px';marker.style.height='36px';marker.classList.add('active');
  }
- focusRequest={x,y,selection,id:++focusSerial,run:runId};
+ focusRequest={x:selection?(selection.x0+selection.x1)/2:x,y:selection?(selection.y0+selection.y1)/2:y,selection,id:++focusSerial,run:runId};
  $('status').textContent='Focused scan queued…';progressStep('Focused scan queued…');
  if(stillMode){stillStale=0;stillError=false;if(!stillPaused){setScanVisual('focused');if(!stillBusy)setTimeout(stillScan,0)}}else if(!busy)setTimeout(scan,0);
 });
