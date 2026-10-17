@@ -807,14 +807,14 @@ function protectRecognized(items,oldProjected){
 let scanRequested=false,reverseScanCount=0,manualScanPending=false,focusRequest=null,focusSerial=0;
 let stillMode=false,stillPending=false,stillBusy=false,stillItems=[],stillSource=null,stillGeneration=0;
 let stillPaused=false,stillPass=0,stillStale=0,stillImproved=0,stillUncertain=0;
-let scanVisual='working',scanVisualTimer=null;
-function setScanVisual(state){scanVisual=state;const el=$('scan-indicator');el.hidden=!stillMode;el.className='scan-indicator '+state;const icon=$('scan-symbol');icon.textContent=state==='working'?'⌕':state==='updated'?'✦':state==='finished'?'■':'Ⅱ';const label=state==='working'?'Scanning':state==='updated'?'Updated':state==='finished'?'Stopped':'Paused';$('scan-label').textContent=label;el.setAttribute('aria-label',label)}
-function flashScanUpdate(){if(scanVisualTimer)clearTimeout(scanVisualTimer);setScanVisual('updated');scanVisualTimer=setTimeout(()=>{scanVisualTimer=null;if(stillMode)setScanVisual(stillPaused?'paused':stillBusy?'working':'finished')},850)}
+let scanVisual='working',scanVisualTimer=null,focusedScanning=false,stillError=false;
+function setScanVisual(state){scanVisual=state;const el=$('scan-indicator');el.hidden=!stillMode;el.className='scan-indicator '+state;const icon=$('scan-symbol');icon.textContent=state==='working'?'⌕':state==='focused'?'⌖':state==='updated'?'✦':state==='finished'?'■':state==='error'?'!':'Ⅱ';const label=state==='working'?'Scanning':state==='focused'?'Focused scan':state==='updated'?'Updated':state==='finished'?'Finished':state==='error'?'Error':'Paused';$('scan-label').textContent=label;el.setAttribute('aria-label',label)}
+function flashScanUpdate(){if(scanVisualTimer)clearTimeout(scanVisualTimer);setScanVisual('updated');scanVisualTimer=setTimeout(()=>{scanVisualTimer=null;if(stillMode)setScanVisual(stillError?'error':stillPaused?'paused':focusedScanning||focusRequest?'focused':stillBusy?'working':'finished')},850)}
 let zoom=1,zoomX=0,zoomY=0;const pointers=new Map();let pinchStart=null,dragStart=null,lastTapAt=0;
 function applyZoom(){const layer=$('zoom-layer');const r=stage.getBoundingClientRect();zoomX=Math.max(-r.width*(zoom-1)/2,Math.min(r.width*(zoom-1)/2,zoomX));zoomY=Math.max(-r.height*(zoom-1)/2,Math.min(r.height*(zoom-1)/2,zoomY));layer.style.transform='translate('+zoomX+'px,'+zoomY+'px) scale('+zoom+')'}
 function resetZoom(){zoom=1;zoomX=0;zoomY=0;applyZoom()}
 function zoomPoint(clientX,clientY){const r=stage.getBoundingClientRect();return {x:(clientX-r.left-r.width/2-zoomX)/zoom+r.width/2,y:(clientY-r.top-r.height/2-zoomY)/zoom+r.height/2}}
-function analysisControls(){const pause=$('pause-scan');pause.hidden=!stillMode;pause.style.display=stillMode?'':'none';$('live-return').hidden=!stillMode;$('live-return').style.display=stillMode?'':'none';const stopped=stillPaused||(!stillBusy&&!stillPending&&(stillStale>=6||stillPass>=18));pause.innerHTML=stopped?'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5L18 12 8 18.5Z" fill="currentColor"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';pause.title=stopped?'Restart OCR analysis':'Pause OCR analysis';pause.setAttribute('aria-label',pause.title);if(!stillMode){if(scanVisualTimer)clearTimeout(scanVisualTimer);$('scan-indicator').hidden=true}else if(scanVisual!=='updated')setScanVisual(stillPaused?'paused':stillBusy?'working':stopped?'finished':'working')}
+function analysisControls(){const pause=$('pause-scan');pause.hidden=!stillMode;pause.style.display=stillMode?'':'none';$('live-return').hidden=!stillMode;$('live-return').style.display=stillMode?'':'none';const stopped=stillPaused||(!stillBusy&&!stillPending&&(stillStale>=6||stillPass>=18));pause.innerHTML=stopped?'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5L18 12 8 18.5Z" fill="currentColor"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';pause.title=stopped?'Restart OCR analysis':'Pause OCR analysis';pause.setAttribute('aria-label',pause.title);if(!stillMode){if(scanVisualTimer)clearTimeout(scanVisualTimer);$('scan-indicator').hidden=true}else if(scanVisual!=='updated')setScanVisual(stillError?'error':stillPaused?'paused':focusedScanning||focusRequest?'focused':stillBusy?'working':stopped?'finished':'working')}
 
 const stillFrame=$('still-frame');
 function stillStatus(message){$('status').textContent=message;if(stillMode){progress.hidden=true;progress.textContent=''}else{progress.hidden=!message;progress.textContent=message}}
@@ -823,7 +823,7 @@ function stillButton(){const b=$('scan');b.hidden=stillMode;b.style.display=stil
 function clearFocus(){focusRequest=null;$('focus-marker').classList.remove('active')}
 function focusCrop(image,request){
  const w=image.width,h=image.height,x=request.x*w,y=request.y*h;
- const cropW=Math.min(w,Math.max(w*.55,360)),cropH=Math.min(h,Math.max(h*.19,95));
+ const cropW=Math.min(w,Math.max(w*.42,220)),cropH=Math.min(h,Math.max(h*.13,65));
  const x0=Math.max(0,Math.min(w-cropW,x-cropW/2)),y0=Math.max(0,Math.min(h-cropH,y-cropH/2));
  const canvas=document.createElement('canvas');canvas.width=Math.round(cropW*2);canvas.height=Math.round(cropH*2);
  canvas.getContext('2d').drawImage(image,x0,y0,cropW,cropH,0,0,canvas.width,canvas.height);
@@ -852,50 +852,68 @@ function stillImageVariant(source,variant){
 }
 async function stillScan(){
  if(!active||!stillMode||stillPaused||busy||stillBusy||!stillSource)return;
- stillPending=false;stillBusy=true;stillButton();setScanVisual('working');
+ stillPending=false;stillBusy=true;stillError=false;stillButton();
  const generation=stillGeneration,source=stillSource;
  try{
   if(!worker){stillStatus('Preparing Japanese OCR…');if(!window.Tesseract)throw Error('OCR library unavailable');worker=await Tesseract.createWorker('jpn',1)}
   if(!stillMode||generation!==stillGeneration)return;
-  for(;stillPass<18&&!stillPaused;stillPass++){
-   if(!stillMode||generation!==stillGeneration)return;
-   stillStatus('Refining recognition · Pass '+(stillPass+1)+'…');
-   const variant=stillImageVariant(source,stillPass);
-   await worker.setParameters({tessedit_pageseg_mode:stillPass%4===1?'6':stillPass%4===3?'7':'11'});
-   const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
-   if(!stillMode||generation!==stillGeneration)return;
-   const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:it.box.x0/variant.factor,y0:it.box.y0/variant.factor,x1:it.box.x1/variant.factor,y1:it.box.y1/variant.factor}}));
-   const changed=stillMerge(stillItems,found);stillStale=changed?0:stillStale+1;if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);paint(stillItems);
-   if(stillStale>=6)break;
-  }
-  // Process tap requests on the same frozen image; no moving-frame coordinates.
-  while(focusRequest&&stillMode&&!stillPaused&&generation===stillGeneration){
-   const request=focusRequest;focusRequest=null;
-   const crop=focusCrop(source,request);
-   for(let pass=0;pass<3;pass++){
-    if(!stillMode||generation!==stillGeneration)break;
-    stillStatus('Focused scan '+(pass+1)+'/3…');
-    const variant=stillImageVariant(crop.canvas,pass);
-    await worker.setParameters({tessedit_pageseg_mode:pass===0?'7':'6'});
-    const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
-    if(!stillMode||generation!==stillGeneration)break;
-    const scale=crop.scale*variant.factor;
-    const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>Math.abs((it.box.y0+it.box.y1)/2-request.y*source.height)<(crop.region.y1-crop.region.y0)/2);
-    stillMerge(stillItems,found);if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);paint(stillItems);
+  // A tap is handled before the next full-frame pass. The running OCR call cannot be interrupted.
+  while(stillMode&&!stillPaused&&generation===stillGeneration){
+   if(focusRequest){
+    const request=focusRequest;focusRequest=null;focusedScanning=true;setScanVisual('focused');
+    const crop=focusCrop(source,request);
+    const targetY=request.y*source.height;
+    const band=Math.max(18,(crop.region.y1-crop.region.y0)*.28);
+    for(let pass=0;pass<3;pass++){
+     if(!stillMode||stillPaused||generation!==stillGeneration||focusRequest)break;
+     stillStatus('Focused scan '+(pass+1)+'/3…');
+     const variant=stillImageVariant(crop.canvas,pass);
+     await worker.setParameters({tessedit_pageseg_mode:pass===0?'7':'6'});
+     const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
+     if(!stillMode||generation!==stillGeneration||stillPaused||focusRequest)break;
+     const scale=crop.scale*variant.factor;
+     const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>Math.abs((it.box.y0+it.box.y1)/2-targetY)<band);
+     stillMerge(stillItems,found);
+     if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
+     paint(stillItems);
+    }
+    focusedScanning=false;
+    if(!focusRequest)$('focus-marker').classList.remove('active');
+    if(stillMode&&generation===stillGeneration&&!stillPaused)setScanVisual(focusRequest?'focused':stillPass>=18||stillStale>=6?'finished':'working');
+    continue;
    }
-   $('focus-marker').classList.remove('active');
+   if(stillPass>=18||stillStale>=6)break;
+   const pass=stillPass++;
+   setScanVisual('working');
+   stillStatus('Refining recognition · Pass '+(pass+1)+'…');
+   const variant=stillImageVariant(source,pass);
+   await worker.setParameters({tessedit_pageseg_mode:pass%4===1?'6':pass%4===3?'7':'11'});
+   const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
+   if(!stillMode||generation!==stillGeneration||stillPaused)break;
+   // Preserve a pending focused tap: do not delay it for further full-frame passes.
+   const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:it.box.x0/variant.factor,y0:it.box.y0/variant.factor,x1:it.box.x1/variant.factor,y1:it.box.y1/variant.factor}}));
+   const changed=stillMerge(stillItems,found);
+   stillStale=changed?0:stillStale+1;
+   if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
+   paint(stillItems);
   }
-  if(stillMode&&generation===stillGeneration){stillStatus(stillPaused?'Analysis paused':stillStale>=6?'No further improvement':'Analysis limit reached');analysisControls()}
- }catch(e){if(stillMode&&generation===stillGeneration)stillStatus('Scan error: '+e.message)}
+  if(stillMode&&generation===stillGeneration){
+   stillStatus(stillPaused?'Analysis paused':stillStale>=6?'Automatic analysis finished (no new candidates)':'Automatic analysis finished');
+  }
+ }catch(e){if(stillMode&&generation===stillGeneration){stillError=true;stillStatus('Scan error: '+e.message)}}
  finally{
+  focusedScanning=false;
   try{if(worker)await worker.setParameters({tessedit_pageseg_mode:'11'})}catch(e){}
-  stillBusy=false;stillButton();if(stillMode)setScanVisual(stillPaused?'paused':'finished');
-  if(stillMode&&generation===stillGeneration&&!stillPaused&&focusRequest)setTimeout(stillScan,0);
+  stillBusy=false;stillButton();
+  if(stillMode&&generation===stillGeneration){
+   setScanVisual(stillError?'error':stillPaused?'paused':focusRequest?'focused':'finished');
+   if(!stillPaused&&focusRequest)setTimeout(stillScan,0);
+  }
  }
 }
 function enterStill(){
  if(!active||stillMode)return;
- stillMode=true;stillGeneration++;runId++;stillPending=true;scanVisual='working';stillPaused=false;stillPass=0;stillStale=0;stillImproved=0;stillUncertain=0;clearFocus();stillItems=[];analysisControls();
+ stillMode=true;stillGeneration++;runId++;stillPending=true;scanVisual='working';stillError=false;focusedScanning=false;stillPaused=false;stillPass=0;stillStale=0;stillImproved=0;stillUncertain=0;clearFocus();stillItems=[];analysisControls();
  const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
  stillSource=document.createElement('canvas');stillSource.width=Math.round(video.videoWidth*scale);stillSource.height=Math.round(video.videoHeight*scale);
  stillSource.getContext('2d').drawImage(video,0,0,stillSource.width,stillSource.height);
@@ -909,7 +927,7 @@ function enterStill(){
 }
 function exitStill(){
  if(!stillMode)return;
- stillMode=false;stillGeneration++;runId++;stillPending=false;stillPaused=false;stillItems=[];stillSource=null;clearFocus();analysisControls();
+ stillMode=false;stillGeneration++;runId++;stillPending=false;stillPaused=false;focusedScanning=false;stillItems=[];stillSource=null;clearFocus();analysisControls();
  stillFrame.classList.remove('visible');video.style.visibility='visible';stillStatus('');
  protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);
  stillButton();if(active&&!busy&&!stillBusy)setTimeout(scan,0);
@@ -1055,9 +1073,9 @@ stage.addEventListener('pointerup',event=>{
  focusRequest={x,y,id:++focusSerial,run:runId};
  const marker=$('focus-marker');const stageRect=stage.getBoundingClientRect();marker.style.left=(event.clientX-stageRect.left-18)+'px';marker.style.top=(event.clientY-stageRect.top-18)+'px';marker.style.width='36px';marker.style.height='36px';marker.classList.add('active');
  $('status').textContent='Focused scan queued…';progressStep('Focused scan queued…');
- if(stillMode){stillStale=0;if(!stillBusy&&!stillPaused)setTimeout(stillScan,0)}else if(!busy)setTimeout(scan,0);
+ if(stillMode){stillStale=0;stillError=false;if(!stillPaused){setScanVisual('focused');if(!stillBusy)setTimeout(stillScan,0)}}else if(!busy)setTimeout(scan,0);
 });
-$('pause-scan').onclick=()=>{if(!stillMode)return;const finished=!stillBusy&&!stillPending&&(stillStale>=6||stillPass>=18);stillPaused=finished?false:!stillPaused;if(!stillPaused&&finished){stillStale=0;stillPass=0}analysisControls();stillStatus(stillPaused?'Analysis paused':stillBusy?'Pause requested…':'Resuming analysis…');if(!stillPaused&&!stillBusy)setTimeout(stillScan,0);setScanVisual(stillPaused?'paused':'working')};
+$('pause-scan').onclick=()=>{if(!stillMode)return;const finished=!stillBusy&&!stillPending&&(stillStale>=6||stillPass>=18);stillPaused=finished?false:!stillPaused;if(!stillPaused&&finished){stillStale=0;stillPass=0}analysisControls();stillStatus(stillPaused?'Analysis paused':stillBusy?'Pause requested…':'Resuming analysis…');if(!stillPaused&&!stillBusy)setTimeout(stillScan,0);setScanVisual(stillPaused?'paused':focusRequest?'focused':'working')};
 $('live-return').onclick=()=>exitStill();
 $('scan').onclick=()=>{if(!active)return;if(stillMode)exitStill();else enterStill()};
 </script></html>
