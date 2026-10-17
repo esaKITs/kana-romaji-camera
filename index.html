@@ -447,7 +447,7 @@ let tracks=[],lastFrame=null,frameChanged=false;
 function imageSignature(){const c=document.createElement('canvas');c.width=16;c.height=12;const q=c.getContext('2d',{willReadFrequently:true});q.drawImage(work,0,0,16,12);const d=q.getImageData(0,0,16,12).data;const out=[];for(let i=0;i<d.length;i+=4)out.push((d[i]*.299+d[i+1]*.587+d[i+2]*.114));return out}
 function motionLevel(next){if(!lastFrame)return 0;let diff=0;for(let i=0;i<next.length;i++)diff+=Math.abs(next[i]-lastFrame[i]);return diff/next.length}
 function overlap(a,b){return Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0))*Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0))/Math.max(1,Math.min((a.x1-a.x0)*(a.y1-a.y0),(b.x1-b.x0)*(b.y1-b.y0)))}
-function updateTracks(items){const now=performance.now(),used=new Set();for(const it of items){let best=-1,score=0;for(let i=0;i<tracks.length;i++){if(used.has(i))continue;const p=tracks[i].box,b=it.box,h=Math.max(8,b.y1-b.y0,p.y1-p.y0),d=Math.hypot((b.x0+b.x1-p.x0-p.x1)/2,(b.y0+b.y1-p.y0-p.y1)/2),ov=overlap(p,b);const v=ov>.25?ov+1:d<h*.7?1-d/(h*.7):0;if(v>score){score=v;best=i}}if(best>=0&&score>.2){const t=tracks[best];used.add(best);t.lastSeen=now;t.misses=0;if(t.text===it.text){t.votes++;if(t.votes>=2)t.locked=true}else if(t.text.includes(it.text)&&t.text.length>it.text.length){t.votes=Math.max(1,t.votes-1)}else if(it.text.includes(t.text)&&it.text.length>t.text.length){t.text=it.text;t.votes=1;t.locked=false}else if(!t.locked){t.text=it.text;t.votes=1}const alpha=t.locked?.12:.4;for(const k of ['x0','y0','x1','y1'])t.box[k]=t.box[k]*(1-alpha)+it.box[k]*alpha}else{tracks.push({...it,box:{...it.box},lastSeen:now,misses:0,votes:1,locked:false});used.add(tracks.length-1)}}tracks=tracks.filter((t,i)=>{if(!used.has(i))t.misses++;return now-t.lastSeen<(t.locked?1600:850)&&t.misses<(t.locked?4:2)});tracks=tracks.filter((t,i)=>!tracks.some((q,j)=>j!==i&&overlap(t.box,q.box)>.58&&(q.locked&&!t.locked||q.locked===t.locked&&q.lastSeen>t.lastSeen)));return tracks}
+function updateTracks(items){const now=performance.now(),used=new Set();for(const it of items){let best=-1,score=0;for(let i=0;i<tracks.length;i++){if(used.has(i))continue;const p=tracks[i].box,b=it.box,h=Math.max(8,b.y1-b.y0,p.y1-p.y0),d=Math.hypot((b.x0+b.x1-p.x0-p.x1)/2,(b.y0+b.y1-p.y0-p.y1)/2),ov=overlap(p,b);const v=ov>.25?ov+1:d<h*.7?1-d/(h*.7):0;if(v>score){score=v;best=i}}if(best>=0&&score>.2){const t=tracks[best];used.add(best);t.lastSeen=now;t.misses=0;if(t.text===it.text){t.votes++;if(t.votes>=2)t.locked=true}else if(t.text.includes(it.text)&&t.text.length>it.text.length){t.votes=Math.max(1,t.votes-1)}else if(it.text.includes(t.text)&&it.text.length>t.text.length){if(!t.locked){t.text=it.text;t.votes=1}}else if(!t.locked){t.text=it.text;t.votes=1}const alpha=t.locked?.12:.4;for(const k of ['x0','y0','x1','y1'])t.box[k]=t.box[k]*(1-alpha)+it.box[k]*alpha}else{tracks.push({...it,box:{...it.box},lastSeen:now,misses:0,votes:1,locked:false});used.add(tracks.length-1)}}tracks=tracks.filter((t,i)=>{if(!used.has(i))t.misses++;return now-t.lastSeen<(t.locked?1600:850)&&t.misses<(t.locked?4:2)});tracks=tracks.filter((t,i)=>!tracks.some((q,j)=>j!==i&&overlap(t.box,q.box)>.58&&(q.locked&&!t.locked||q.locked===t.locked&&q.lastSeen>t.lastSeen)));return tracks}
 // Lightweight on-device block matching. Coordinates are in OCR canvas pixels.
 let trackingTimer=null,trackPrev=null,trackingRevision=0,trackingFailures=0;
 const trackCanvas=document.createElement('canvas');trackCanvas.width=160;trackCanvas.height=120;const trackCtx=trackCanvas.getContext('2d',{willReadFrequently:true});
@@ -786,11 +786,11 @@ function protectRecognized(items,oldProjected){
   const old=oldProjected.find(p=>sameKanaRegion(p,it));
   if(!old){next.push({...it,votes:1,state:kanaThreshold(it)===1?'provisional':'pending'});continue}
   matched.add(old);
-  if(old.state==='confirmed'){next.push(old);continue}
-  const merged=mergeKanaEvidence(old,it);
+  if(old.state==='confirmed'){next.push({...old,box:{...it.box}});continue}
+  const merged=evidenceMerge(old,it,'live-'+Math.floor(performance.now()/250));
   const required=kanaThreshold(merged);
   const votes=merged.votes||1;
-  const state=votes>=Math.max(2,required)&&Number.isFinite(required)?'confirmed':required===1?'provisional':'pending';
+  const state=merged.state==='confirmed'?'confirmed':votes>=Math.max(2,required)&&Number.isFinite(required)?'confirmed':required===1?'provisional':'pending';
   next.push({...merged,state});
  }
  for(const old of oldProjected){
@@ -830,18 +830,65 @@ function focusCrop(image,request){
  return {canvas,x0,y0,scale:2,region:{x0,y0,x1:x0+cropW,y1:y0+cropH}};
 }
 
-function stillMerge(items,newItems){
- let improvements=0;
+// Shared, session-only evidence. Never transfer boxes without matching the captured image.
+let sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};
+function imageFingerprint(canvas){
+ if(!canvas||!canvas.width||!canvas.height)return null;
+ const c=document.createElement('canvas');c.width=24;c.height=18;
+ const q=c.getContext('2d',{willReadFrequently:true});q.drawImage(canvas,0,0,24,18);
+ const d=q.getImageData(0,0,24,18).data,values=[];
+ for(let i=0;i<d.length;i+=4)values.push(.299*d[i]+.587*d[i+1]+.114*d[i+2]);
+ return values;
+}
+function imageMatches(a,b){
+ if(!a||!b||a.length!==b.length)return false;
+ let diff=0;for(let i=0;i<a.length;i++)diff+=Math.abs(a[i]-b[i]);
+ return diff/a.length<14;
+}
+function rememberRecognition(canvas,items,source){
+ if(!canvas||!items.length)return;
+ const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;copy.getContext('2d').drawImage(canvas,0,0);
+ sharedRecognition={canvas:copy,items:items.slice(0,100).map(it=>({...it,box:{...it.box},source:it.source||source})),source,capturedAt:performance.now(),signature:imageFingerprint(copy)};
+}
+function transferToStill(canvas){
+ const previous=sharedRecognition;
+ if(!previous.items.length||performance.now()-previous.capturedAt>12000||!imageMatches(previous.signature,imageFingerprint(canvas)))return [];
+ const sx=canvas.width/previous.canvas.width,sy=canvas.height/previous.canvas.height;
+ return previous.items.map(it=>({...it,box:{x0:it.box.x0*sx,x1:it.box.x1*sx,y0:it.box.y0*sy,y1:it.box.y1*sy},state:it.state||'pending',source:it.source||previous.source}));
+}
+function candidateSupport(it){return it.support||{[it.text]:{text:it.text,groups:[it.source||'initial'],confidence:it.confidence||50}}}
+function evidenceMerge(old,candidate,group){
+ const support=candidateSupport(old),name=candidate.text;
+ if(!support[name])support[name]={text:name,groups:[],confidence:0};
+ const record=support[name];
+ if(!record.groups.includes(group))record.groups.push(group);
+ record.confidence=Math.max(record.confidence,candidate.confidence||0);
+ const existing=support[old.text]||{groups:[],confidence:old.confidence||50};
+ const newEvidence=record.groups.length,oldEvidence=existing.groups.length;
+ // Variant OCR on one frozen frame counts as a single evidence group.
+ // A conflicting candidate needs independent evidence and a clear lead.
+ const switchAllowed=name!==old.text&&newEvidence>=2&&newEvidence>oldEvidence&&record.confidence>=Math.max(40,existing.confidence-10);
+ if(switchAllowed)return {...candidate,box:{...candidate.box},support,source:group,state:'confirmed',votes:newEvidence};
+ return {...old,support,votes:Math.max(old.votes||1,oldEvidence),state:oldEvidence>=2?'confirmed':old.state||'pending'};
+}
+function stillMerge(items,newItems,group='still-frame'){
+ let updates=0;
  for(const candidate of newItems){
   if(!candidate.box||!kanaOnly.test(candidate.text)||candidate.confidence<24)continue;
   const matches=items.filter(it=>sameKanaRegion(it,candidate));
-  if(!matches.length){items.push(candidate);improvements++;continue}
-  const score=it=>Math.max(0,it.confidence??50)*Math.sqrt(Math.max(1,[...it.text].length));
-  const best=matches.reduce((a,b)=>score(a)>score(b)?a:b);
-  if(best.text===candidate.text){best.votes=(best.votes||1)+1;best.confidence=Math.max(best.confidence||0,candidate.confidence||0)}
-  else if(score(candidate)>score(best)*1.12){items.splice(items.indexOf(best),1,candidate);improvements++}
+  if(!matches.length){
+   const support={[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence||50}};
+   items.push({...candidate,support,source:group,state:'pending',votes:1});updates++;continue;
+  }
+  const best=matches.find(it=>it.state==='confirmed')||matches[0];
+  const next=evidenceMerge(best,candidate,group);
+  if(next.text!==best.text)updates++;
+  items.splice(items.indexOf(best),1,next);
  }
- if(improvements>0&&stillMode)flashScanUpdate();stillImproved+=improvements;stillUncertain=items.filter(it=>(it.votes||1)<2||(it.confidence||0)<75).length;return improvements;
+ if(updates&&stillMode)flashScanUpdate();
+ stillImproved+=updates;
+ stillUncertain=items.filter(it=>it.state!=='confirmed').length;
+ return updates;
 }
 function stillImageVariant(source,variant){
  const c=document.createElement('canvas'),factor=variant%3===0?1:variant%3===1?1.6:2;
@@ -873,7 +920,7 @@ async function stillScan(){
      if(!stillMode||generation!==stillGeneration||stillPaused||focusRequest)break;
      const scale=crop.scale*variant.factor;
      const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>Math.abs((it.box.y0+it.box.y1)/2-targetY)<band);
-     stillMerge(stillItems,found);
+     stillMerge(stillItems,found,'still-frame');
      if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
      paint(stillItems);
     }
@@ -892,7 +939,7 @@ async function stillScan(){
    if(!stillMode||generation!==stillGeneration||stillPaused)break;
    // Preserve a pending focused tap: do not delay it for further full-frame passes.
    const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:it.box.x0/variant.factor,y0:it.box.y0/variant.factor,x1:it.box.x1/variant.factor,y1:it.box.y1/variant.factor}}));
-   const changed=stillMerge(stillItems,found);
+   const changed=stillMerge(stillItems,found,'still-frame');
    stillStale=changed?0:stillStale+1;
    if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
    paint(stillItems);
@@ -922,14 +969,19 @@ function enterStill(){
  work.width=stillSource.width;work.height=stillSource.height;
  wc.drawImage(stillSource,0,0,work.width,work.height);
  sharedLabelColor=null;
+ stillItems=transferToStill(stillSource);
+ if(stillItems.length){captureSharedLabelColor(stillSource,stillItems);paint(stillItems)}
  resetTracking();referenceCanvas=null;referenceItems=[];tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);
  stillStatus('Refining recognition…');stillButton();if(!busy)setTimeout(stillScan,0);
 }
 function exitStill(){
  if(!stillMode)return;
+ if(stillSource&&stillItems.length)rememberRecognition(stillSource,stillItems,'still-frame');
  stillMode=false;stillGeneration++;runId++;stillPending=false;stillPaused=false;focusedScanning=false;stillItems=[];stillSource=null;clearFocus();analysisControls();
  stillFrame.classList.remove('visible');video.style.visibility='visible';stillStatus('');
  protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);
+ // Resume live tracking from the still image, but only after image registration succeeds.
+ if(sharedRecognition.source==='still-frame'&&sharedRecognition.items.length){referenceCanvas=sharedRecognition.canvas;referenceItems=sharedRecognition.items.map(it=>({...it,box:{...it.box}}));flowReset();}
  stillButton();if(active&&!busy&&!stillBusy)setTimeout(scan,0);
 }
 async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame();const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
@@ -1046,6 +1098,7 @@ async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy
   captureSharedLabelColor(scanCapture,items);
   referenceCanvas=scanCapture;
   referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
+  rememberRecognition(scanCapture,captureItems,'live-frame');
   flowReset();
   tracks=elapsedMotion?captureItems.map(it=>({...it,box:moveBox(it.box,elapsedMotion)})):captureItems;
   lastFrame=frameSignature;
