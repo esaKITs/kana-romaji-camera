@@ -382,6 +382,34 @@ function sampledPaperColor(b,image=work){
  }
  return [0,1,2].map(c=>Math.round(paper.reduce((sum,rgb)=>sum+rgb[c],0)/Math.max(1,paper.length)));
 }
+// One coherent label background per tracked document, not a new RGB value
+// for each label or each camera frame. A new objectEpoch invalidates it.
+let documentLabelPalette={epoch:-1,paper:null};
+function unifiedLabelPaper(accepted,image,scaleX,scaleY){
+ if(documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.paper)return documentLabelPalette.paper;
+ const samples=accepted.map(c=>{
+  const b=c.source;
+  const rgb=sampledPaperColor({x0:b.x0*scaleX,y0:b.y0*scaleY,x1:b.x1*scaleX,y1:b.y1*scaleY},image);
+  const area=Math.max(1,(b.x1-b.x0)*(b.y1-b.y0));
+  return {rgb,weight:Math.min(5,Math.max(1,Math.sqrt(area)/30))};
+ });
+ if(!samples.length)return [245,245,245];
+ // Select the prevailing paper tone, rather than averaging dark packaging
+ // with white ink, glare, or isolated brightly colored labels.
+ const groups=new Map();
+ for(const sample of samples){
+  const light=sample.rgb.reduce((v,c,i)=>v+c*[.299,.587,.114][i],0);
+  const key=light<85?'dark':light>185?'light':'middle';
+  const group=groups.get(key)||{weight:0,colors:[]};
+  group.weight+=sample.weight;group.colors.push(sample);groups.set(key,group);
+ }
+ const winner=[...groups.values()].sort((a,b)=>b.weight-a.weight)[0];
+ const sorted=[...winner.colors].sort((a,b)=>a.rgb.reduce((v,c)=>v+c,0)-b.rgb.reduce((v,c)=>v+c,0));
+ let total=0;const half=winner.weight/2;let paper=sorted[0].rgb;
+ for(const entry of sorted){total+=entry.weight;if(total>=half){paper=entry.rgb;break}}
+ documentLabelPalette={epoch:objectEpoch,paper:[...paper]};
+ return documentLabelPalette.paper;
+}
 const labelColorImage=document.createElement('canvas');
 function currentLabelImage(image){
  // Live boxes have already been projected into the CURRENT frame. Sampling
@@ -466,10 +494,11 @@ function paint(items){
  }
  const colorImage=accepted.length?currentLabelImage(image):null;
  const colorScaleX=colorImage?colorImage.width/image.width:1,colorScaleY=colorImage?colorImage.height/image.height:1;
+ const unifiedPaper=colorImage?unifiedLabelPaper(accepted,colorImage,colorScaleX,colorScaleY):null;
  for(const c of accepted){
   ctx.save();ctx.translate(c.x,c.y);
   ctx.font='700 '+c.font+'px system-ui';
-  const paper=sampledPaperColor({x0:c.source.x0*colorScaleX,y0:c.source.y0*colorScaleY,x1:c.source.x1*colorScaleX,y1:c.source.y1*colorScaleY},colorImage);ctx.fillStyle='rgb('+paper.join(',')+')';
+  const paper=unifiedPaper;ctx.fillStyle='rgb('+paper.join(',')+')';
   ctx.fillRect(-c.bandW/2,-c.bandH/2,c.bandW,c.bandH);
   const brightness=(paper[0]*.299+paper[1]*.587+paper[2]*.114);ctx.fillStyle=brightness>145?'#15212a':'#ffffff';ctx.textAlign='center';
   c.lines.forEach((line,i)=>ctx.fillText(line,0,(i-(c.lines.length-1)/2)*c.font*1.05));
