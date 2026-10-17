@@ -683,6 +683,43 @@ async function retryLargeLines(data,items){
  finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
  return best;
 }
+// Independently inspect large-print bands even when smaller text was found.
+// OCR only supplies kana actually present in the returned symbol/word boxes.
+let largeBandScanCount=0;
+async function retryIndependentLargeKana(items,myId){
+ if(!active||myId!==runId||++largeBandScanCount%2!==1)return items;
+ const w=work.width,h=work.height;
+ if(w<100||h<120)return items;
+ const bandH=Math.round(h*.38),positions=[Math.round(h*.10),Math.round(h*.48)];
+ const fresh=[];
+ try{
+  await worker.setParameters({tessedit_pageseg_mode:'6'});
+  for(const top of positions){
+   if(!active||myId!==runId)return items;
+   const y=Math.min(h-bandH,Math.max(0,top));
+   const crop=document.createElement('canvas');crop.width=w;crop.height=bandH;
+   crop.getContext('2d').drawImage(work,0,y,w,bandH,0,0,w,bandH);
+   const result=await worker.recognize(crop,{}, {text:true,blocks:true});
+   if(!active||myId!==runId)return items;
+   for(const it of rebuildRows(extract(result.data))){
+    const b=it.box,height=b.y1-b.y0;
+    if(height<Math.max(28,h*.045)||(it.confidence??0)<45)continue;
+    const mapped={...it,box:{x0:b.x0,x1:b.x1,y0:b.y0+y,y1:b.y1+y}};
+    const q=mapped.box,cx=(q.x0+q.x1)/2,cy=(q.y0+q.y1)/2;
+    const overlap=[...items,...fresh].some(existing=>{
+     const e=existing.box;
+     const ix=Math.max(0,Math.min(q.x1,e.x1)-Math.max(q.x0,e.x0));
+     const iy=Math.max(0,Math.min(q.y1,e.y1)-Math.max(q.y0,e.y0));
+     return ix*iy>Math.min((q.x1-q.x0)*(q.y1-q.y0),(e.x1-e.x0)*(e.y1-e.y0))*.3 ||
+      (cx>=e.x0&&cx<=e.x1&&cy>=e.y0&&cy<=e.y1);
+    });
+    if(!overlap)fresh.push(mapped);
+   }
+  }
+ }catch(e){console.warn('Independent large kana OCR unavailable:',e)}
+ finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
+ return items.concat(fresh);
+}
 let scanRequested=false,reverseScanCount=0;
 async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanRequested=false;const myId=runId;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame();const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
  // Trial: re-recognize up to two larger lines without changing the baseline OCR result unless better.
@@ -729,6 +766,8 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanR
    }
   }catch(e){console.warn('Reverse-polarity OCR unavailable:',e)}
  }
+ // Independently search large-print bands, regardless of smaller OCR successes.
+ if(active&&myId===runId)items=await retryIndependentLargeKana(items,myId);
  // One extra rotated OCR pass only when the primary scan finds little usable text.
  // Alternate angles across scans to keep the iPhone workload bounded.
  if(items.length<2&&active&&myId===runId){
