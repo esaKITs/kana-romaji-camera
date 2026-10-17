@@ -12,6 +12,7 @@ A real browser test exposed another object-change path: optical flow can return 
 
 Validation:
 - Build: success; matching local WASM/model paths and checksums exported.
+- Real OpenCV movement, rotation, moved+rotated, white→black, black→white and different white-object cases: 6/6 passed.
 - 100 unit/controller tests passed, zero skipped/cancelled/todo. Three stale original assertions were explicitly migrated: the current app's unified palette replaces independent panel colors/recoloring; the interface assertion compares exact CSS and camera controls while allowing changed OCR scripts/credits. The unmodified original assertions first produced 86 pass/3 fail, and were not reported as passing.
 - Linux Chromium 153, Android-sized and iPhone-sized viewports, **synthetic camera streams**, actual module Worker and ONNX inference: pass. Hiragana, katakana, mixed kanji/kana, four lines, white/black polarity, white→different black→white, movement/rotation, Live→Still→Live, stop, zero page errors and zero upload requests. This is not Android Chrome or iPhone Safari hardware verification.
 - Chromium final measured first-label time: 1.868s / 1.885s from Start. Model readiness 1.145s / 1.155s from page initialization. Subsequent four-line inference: 0.724–0.769s. Local HTTP asset transfer is fast; these numbers do not predict mobile Internet cold-start time.
@@ -19,7 +20,7 @@ Validation:
 
 Remaining limits:
 - Physical iPhone Safari and Android Chrome cameras, cold Internet download, mobile memory/thermal/battery behavior, long sessions and real packaging/glare are not verified.
-- Linux WebKit is being tested separately; a launch attempt initially hit missing system libraries and camera-stream GStreamer plugins. This is not evidence that iPhone Safari fails or succeeds.
+- Linux WebKit 26.5 actual module Worker + WASM inference: white→black→white source images succeeded (891ms / 697ms / 684ms). Japanese text, per-character geometry, contiguous kana extraction and romaji rendering through the controller harness passed. The headless canvas-camera route stalled at video.readyState=0 even though models initialized; it is explicitly NOT a passed camera test. Initial missing-library/GStreamer-plugin failures were investigated and repaired enough to run source-image inference. Physical iPhone Safari remains unverified.
 - Model recognizer capacity is 48 characters per line; warnings remain available in diagnostics. Arbitrary camera images may be misrecognized. No claim of perfect segmentation or faster performance than Tesseract on a phone is made.
 - New combined experiment distribution is GPL-3.0-only; original app code retains MIT, models LGPL-3.0, ORT MIT, OpenCV Apache-2.0, alignment helpers MIT, original UniDic notices retained. License originals, pinned model details, build scripts and corresponding application/library source archives are served alongside the experiment.
 

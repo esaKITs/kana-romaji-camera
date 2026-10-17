@@ -1,0 +1,238 @@
+{
+  "results": [
+    {
+      "browser": "webkit",
+      "version": "26.5",
+      "realPhone": false,
+      "cameraTested": false,
+      "fixture": "white",
+      "elapsedMs": 891,
+      "readyMs": 1150,
+      "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
+      "regions": [
+        {
+          "text": "しないでください",
+          "box": {
+            "x0": 53,
+            "y0": 52,
+            "x1": 423,
+            "y1": 92
+          }
+        },
+        {
+          "text": "ジャスミンティー",
+          "box": {
+            "x0": 48,
+            "y0": 171,
+            "x1": 424,
+            "y1": 211
+          }
+        },
+        {
+          "text": "したりしないでください",
+          "box": {
+            "x0": 139,
+            "y0": 287,
+            "x1": 663,
+            "y1": 331
+          }
+        },
+        {
+          "text": "あなたの",
+          "box": {
+            "x0": 48,
+            "y0": 405,
+            "x1": 235,
+            "y1": 449
+          }
+        },
+        {
+          "text": "を",
+          "box": {
+            "x0": 333,
+            "y0": 405,
+            "x1": 380,
+            "y1": 449
+          }
+        },
+        {
+          "text": "に",
+          "box": {
+            "x0": 477,
+            "y0": 405,
+            "x1": 517,
+            "y1": 449
+          }
+        }
+      ],
+      "romaji": [
+        "shitarishinaidekudasai",
+        "shinaidekudasai",
+        "jasumintī",
+        "anatano",
+        "o",
+        "ni"
+      ]
+    },
+    {
+      "browser": "webkit",
+      "version": "26.5",
+      "realPhone": false,
+      "cameraTested": false,
+      "fixture": "black",
+      "elapsedMs": 697,
+      "readyMs": 1150,
+      "text": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
+      "regions": [
+        {
+          "text": "ここをあけないでください",
+          "box": {
+            "x0": 54,
+            "y0": 52,
+            "x1": 614,
+            "y1": 94
+          }
+        },
+        {
+          "text": "コーヒー",
+          "box": {
+            "x0": 51,
+            "y0": 177,
+            "x1": 227,
+            "y1": 205
+          }
+        },
+        {
+          "text": "してください",
+          "box": {
+            "x0": 148,
+            "y0": 287,
+            "x1": 421,
+            "y1": 331
+          }
+        },
+        {
+          "text": "お",
+          "box": {
+            "x0": 48,
+            "y0": 405,
+            "x1": 95,
+            "y1": 449
+          }
+        },
+        {
+          "text": "の",
+          "box": {
+            "x0": 188,
+            "y0": 405,
+            "x1": 237,
+            "y1": 449
+          }
+        },
+        {
+          "text": "の",
+          "box": {
+            "x0": 285,
+            "y0": 405,
+            "x1": 333,
+            "y1": 449
+          }
+        },
+        {
+          "text": "かない",
+          "box": {
+            "x0": 380,
+            "y0": 405,
+            "x1": 524,
+            "y1": 449
+          }
+        }
+      ],
+      "romaji": [
+        "kokōakenaidekudasai",
+        "shitekudasai",
+        "kōhī",
+        "kanai",
+        "no",
+        "no",
+        "o"
+      ]
+    },
+    {
+      "browser": "webkit",
+      "version": "26.5",
+      "realPhone": false,
+      "cameraTested": false,
+      "fixture": "white",
+      "elapsedMs": 684,
+      "readyMs": 1150,
+      "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
+      "regions": [
+        {
+          "text": "しないでください",
+          "box": {
+            "x0": 53,
+            "y0": 52,
+            "x1": 423,
+            "y1": 92
+          }
+        },
+        {
+          "text": "ジャスミンティー",
+          "box": {
+            "x0": 48,
+            "y0": 171,
+            "x1": 424,
+            "y1": 211
+          }
+        },
+        {
+          "text": "したりしないでください",
+          "box": {
+            "x0": 139,
+            "y0": 287,
+            "x1": 663,
+            "y1": 331
+          }
+        },
+        {
+          "text": "あなたの",
+          "box": {
+            "x0": 48,
+            "y0": 405,
+            "x1": 235,
+            "y1": 449
+          }
+        },
+        {
+          "text": "を",
+          "box": {
+            "x0": 333,
+            "y0": 405,
+            "x1": 380,
+            "y1": 449
+          }
+        },
+        {
+          "text": "に",
+          "box": {
+            "x0": 477,
+            "y0": 405,
+            "x1": 517,
+            "y1": 449
+          }
+        }
+      ],
+      "romaji": [
+        "shitarishinaidekudasai",
+        "shinaidekudasai",
+        "jasumintī",
+        "anatano",
+        "o",
+        "ni"
+      ]
+    }
+  ],
+  "errors": [],
+  "uploads": []
+}

@@ -29,9 +29,9 @@ jobs:
       - name: Chromium actual Worker and camera-stream integration
         working-directory: meikiocr-test
         run: node scripts/browser-test.mjs
-      - name: WebKit actual Worker and camera-stream integration
+      - name: WebKit actual Worker and source-image inference (camera unverified)
         working-directory: meikiocr-test
-        run: BROWSER=webkit node scripts/browser-test.mjs
+        run: BROWSER=webkit node scripts/engine-browser-test.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: meikiocr-mobile-test
