@@ -72,7 +72,7 @@ test('homography maps to explicit target dimensions, independent of work canvas'
  for(const [key,value] of Object.entries({x0:40,y0:120,x1:80,y1:180}))assert.ok(Math.abs(out[key]-value)<1e-9);
 });
 test('direct registration uses frozen target and restores original tracking cache',()=>{
- const h=setup();h.put('items',[reading()]);h.run('rememberRecognition(work,items,"live-frame");wc.fillStyle="black";wc.fillRect(0,0,640,360);savedRef=referenceCanvas;savedCache=flowCache;seenTarget=null;flowLocate=target=>{seenTarget=target;return {m:[1,0,10,0,1,0,0,0,1],W:640,H:360,refW:640,refH:360}}');
+ const h=setup();h.put('items',[reading()]);h.run('wc.fillStyle="black";for(let y=40;y<320;y+=35)for(let x=40;x<580;x+=35)wc.fillRect(x,y,12,15);rememberRecognition(work,items,"live-frame");const oldImage=document.createElement("canvas");oldImage.width=640;oldImage.height=360;oldImage.getContext("2d").drawImage(work,0,0);wc.fillStyle="white";wc.fillRect(0,0,640,360);wc.drawImage(oldImage,10,0);savedRef=referenceCanvas;savedCache=flowCache;seenTarget=null;flowLocate=target=>{seenTarget=target;return {m:[1,0,10,0,1,0,0,0,1],W:640,H:360,refW:640,refH:360}}');
  assert.equal(h.run('transferToStill(work)[0].box.x0'),110);assert.equal(h.run('seenTarget===work&&savedRef===referenceCanvas&&savedCache===flowCache'),true);
 });
 test('invalid registration result cannot enter shared history',()=>{
