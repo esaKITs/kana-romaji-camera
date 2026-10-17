@@ -912,6 +912,7 @@ async function stillScan(){
    if(focusRequest){
     const request=focusRequest;focusRequest=null;focusedScanning=true;setScanVisual('focused');
     const crop=focusCrop(source,request);
+    let focusedFound=0;
     const targetY=request.y*source.height;
     const band=request.selection?(crop.region.y1-crop.region.y0):Math.max(18,(crop.region.y1-crop.region.y0)*.28);
     for(let pass=0;pass<3;pass++){
@@ -937,9 +938,8 @@ async function stillScan(){
       return cx>=crop.region.x0-2&&cx<=crop.region.x1+2&&cy>=crop.region.y0-2&&cy<=crop.region.y1+2;
      });
      if(found.length){
-      focusedScanFailure=false;
+      focusedFound+=found.length;focusedScanFailure=false;
       // Explicit selection has priority over previous automatic guesses in this region.
-      const region=request.selection?{x0:request.selection.x0*source.width,x1:request.selection.x1*source.width,y0:crop.region.y0,y1:crop.region.y1}:crop.region;
       for(const candidate of found){
        if(!kanaOnly.test(candidate.text))continue;
        candidate.focused=true;candidate.state='provisional';
@@ -953,7 +953,7 @@ async function stillScan(){
        if(match)match.focused=true;
       }
      }
-     if(pass===2&&!found.length&&stillMode){focusedScanFailure=true;stillStatus('No kana detected in selection · Try a wider selection')}
+     if(pass===2&&!focusedFound&&stillMode){focusedScanFailure=true;stillStatus('No kana detected in selection · Try a wider selection')}
      if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
      paint(stillItems);
     }
@@ -993,7 +993,7 @@ async function stillScan(){
 }
 function enterStill(){
  if(!active||stillMode)return;
- stillMode=true;stillGeneration++;runId++;stillPending=true;scanVisual='working';stillError=false;focusedScanning=false;stillPaused=false;stillPass=0;stillStale=0;stillImproved=0;stillUncertain=0;clearFocus();stillItems=[];analysisControls();
+ stillMode=true;stage.style.touchAction='none';stillGeneration++;runId++;stillPending=true;scanVisual='working';stillError=false;focusedScanning=false;stillPaused=false;stillPass=0;stillStale=0;stillImproved=0;stillUncertain=0;clearFocus();stillItems=[];analysisControls();
  const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
  stillSource=document.createElement('canvas');stillSource.width=Math.round(video.videoWidth*scale);stillSource.height=Math.round(video.videoHeight*scale);
  stillSource.getContext('2d').drawImage(video,0,0,stillSource.width,stillSource.height);
@@ -1010,7 +1010,7 @@ function enterStill(){
 function exitStill(){
  if(!stillMode)return;
  if(stillSource&&stillItems.length)rememberRecognition(stillSource,stillItems,'still-frame');
- stillMode=false;stillGeneration++;runId++;stillPending=false;stillPaused=false;focusedScanning=false;stillItems=[];stillSource=null;clearFocus();analysisControls();
+ stillMode=false;stage.style.touchAction='manipulation';stillGeneration++;runId++;stillPending=false;stillPaused=false;focusedScanning=false;stillItems=[];stillSource=null;clearFocus();analysisControls();
  stillFrame.classList.remove('visible');video.style.visibility='visible';stillStatus('');
  protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);
  // Resume live tracking from the still image, but only after image registration succeeds.
