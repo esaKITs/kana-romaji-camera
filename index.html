@@ -383,7 +383,7 @@ function paint(items){
  ctx.clearRect(0,0,overlay.width,overlay.height);
  ctx.textBaseline='middle';
  const unit=overlay.width/Math.max(1,stage.getBoundingClientRect().width);
- const desiredFont=21*unit,minFont=12*unit,pad=4*unit;
+ const desiredFont=21*unit,pad=4*unit;
  const candidates=[];
  for(const item of items){
   const b=item.displayBox||item.box,w=b.x1-b.x0,h=b.y1-b.y0;
@@ -396,7 +396,7 @@ function paint(items){
   if(!output||/[^a-zāīūēō'\\-]/i.test(output))continue;
   // Preserve OCR anchoring. Fit to the original word box instead of drifting across lines.
   const allowedWidth=w;
-  let font=Math.min(desiredFont,h*.86);
+  let font=Math.min(h*.78,Math.max(desiredFont,h*.68));
   ctx.font='700 '+font+'px system-ui';
   let width=ctx.measureText(output).width;
   if(width+pad*2>allowedWidth){
@@ -544,8 +544,8 @@ async function trackTick(){
    if(located){
     const moved=referenceItems.map(it=>({...it,box:flowWarpBox(it.box,located)})).filter(it=>it.box);
     if(moved.length){tracks=moved;paint(moved);flowFailures=0;flowLastSuccess=performance.now()}
-   }else{flowFailures++; if(flowFailures>=5){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);}}
-  }catch(e){featureFailure=String(e.message||e);flowFailures++;if(flowFailures>=5){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height)}}
+   }else{flowFailures++; if(flowFailures>=2){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);}}
+  }catch(e){featureFailure=String(e.message||e);flowFailures++;if(flowFailures>=2){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height)}}
   finally{featureBusy=false}
  }
  if(active)trackingTimer=setTimeout(trackTick,65);
