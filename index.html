@@ -722,6 +722,8 @@ async function retryIndependentLargeKana(items,myId){
 }
 // Progressive OCR stabilization. Stored boxes are always in the latest verified scan frame.
 let protectedKana=[];
+let historyLastVerified=0;
+const HISTORY_TTL_MS=12000;
 function kanaThreshold(it){
  const n=[...it.text].length,c=it.confidence??0;
  return n>=10&&c>=85?1:n>=6&&c>=80?2:n>=3&&c>=85?2:n<=2&&c>=90?3:Infinity;
@@ -792,6 +794,7 @@ function protectRecognized(items,oldProjected){
  // Suppress fragment labels overlapping a protected whole phrase.
  const result=next.filter((it,i)=>!next.some((other,j)=>i!==j&&other.state==='confirmed'&&it.state!=='confirmed'&&sameKanaRegion(it,other)));
  protectedKana=result.slice(0,80);
+ historyLastVerified=performance.now();
  kanaHistory=protectedKana.map(it=>({text:it.text,box:{...it.box},confidence:it.confidence,votes:it.votes,state:it.state})); 
  return protectedKana;
 }
@@ -864,30 +867,37 @@ async function scan(){if(!active||busy||!video.videoWidth)return;busy=true;scanR
  // Reproject protected regions from the previous verified frame before replacing it.
  // If tracking cannot establish correspondence, do not transplant labels to a new page.
  let oldProjected=[];
- if(canPlace&&referenceCanvas&&protectedKana.length){
+ const historyFresh=performance.now()-historyLastVerified<HISTORY_TTL_MS;
+ if(canPlace&&referenceCanvas&&protectedKana.length&&historyFresh){
   try{
    const transform=flowLocate();
-   if(transform)oldProjected=protectedKana.map(it=>({...it,box:flowWarpBox(it.box,transform)})).filter(it=>it.box);
+   if(transform){
+    // flowWarpBox yields CURRENT video coordinates, not scan-capture coordinates.
+    // Undo capture-to-current motion before merging or publishing a new reference.
+    oldProjected=protectedKana.map(it=>{
+     const liveBox=flowWarpBox(it.box,transform);
+     return liveBox?{...it,box:elapsedMotion?moveBox(liveBox,{dx:-(elapsedMotion.dx||0),dy:-(elapsedMotion.dy||0)}):liveBox}:null;
+    }).filter(Boolean);
+   }
   }catch(e){console.warn('Protected text reprojection unavailable:',e)}
  }
- // Never display capture-time OCR coordinates on a substantially changed live frame.
+ // Preserve the last verified reference on transient OCR or tracking failure.
+ // Never attach history to a different page without a verified image transform.
  if(items.length&&canPlace){
-  const guarded=protectRecognized(stable,oldProjected);
+  const captureItems=protectRecognized(items,oldProjected);
   captureSharedLabelColor(scanCapture,items);
   referenceCanvas=scanCapture;
-  referenceItems=guarded.map(it=>({...it,box:{...it.box}}));
+  referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
   flowReset();
-  tracks=guarded;
+  tracks=elapsedMotion?captureItems.map(it=>({...it,box:moveBox(it.box,elapsedMotion)})):captureItems;
   lastFrame=frameSignature;
   alignOverlay();
-  paint(guarded);
- }else if(!canPlace){
-  // Keep tracking the previous verified reference, rather than teleporting new labels.
-  lastFrame=frameSignature;
+  paint(tracks);
  }else{
   lastFrame=frameSignature;
+  if(!historyFresh){protectedKana=[];kanaHistory=[]}
  }
  if(myId!==runId)return;progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active){if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,200)}}}}
-$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;hasShownLabels=false;sharedLabelColor=null;protectedKana=[];kanaHistory=[];runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
+$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;hasShownLabels=false;sharedLabelColor=null;protectedKana=[];kanaHistory=[];historyLastVerified=0;runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
 $('stop').onclick=()=>{active=false;runId++;manualScanPending=false;$('scan').classList.remove('rescanning');protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};$('scan').onclick=()=>{if(!active)return;runId++;scanRequested=true;manualScanPending=true;protectedKana=[];kanaHistory=[];referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);$('scan').classList.add('rescanning');$('scan').setAttribute('aria-label','Rescanning');$('scan').title='Rescanning';$('recognized').textContent='';$('status').textContent='Rescanning…';progressStep('Rescanning…');if(!busy)setTimeout(scan,0)};
 </script></html>
