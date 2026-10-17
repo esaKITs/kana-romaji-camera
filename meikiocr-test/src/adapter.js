@@ -1,4 +1,4 @@
-import {createMeikiOcr} from 'meikiocr-web';
+import {createMeikiOcr} from '../vendor/meikiocr-web/index.js';
 import {createAdapter} from './bridge.js';
 let pending=null;
 export const metrics={progress:[],scans:[],readyMs:null,firstLabelMs:null,startClickMs:null,backend:'wasm',error:null};
@@ -11,7 +11,7 @@ export function initialize(){
   const response=await fetch(base+'manifest.json');if(!response.ok)throw Error('OCR manifest HTTP '+response.status);
   const manifest=await response.json();
   const client=await createMeikiOcr({manifest,assetBaseUrl:base,profile:'meikipop-v2',execution:'wasm',wasmThreads:1,vertical:'off',recognitionBatchSize:1,maxInputPixels:4000000,scanTimeoutMs:60000,
-   workerFactory:()=>new Worker(new URL('meikiocr-web/worker',import.meta.url),{type:'module'}),
+   workerFactory:()=>new Worker(new URL('../vendor/meikiocr-web/worker.js',import.meta.url),{type:'module'}),
    onProgress:e=>{metrics.progress.push(e);if(metrics.progress.length>80)metrics.progress.shift();const mb=e.loadedBytes?` ${(e.loadedBytes/1e6).toFixed(1)} MB`:'';status(e.phase==='initializing'?'Preparing Japanese OCR…':e.phase==='ready'?'Japanese OCR ready':'Loading Japanese OCR: '+(e.phase||'')+mb);}
   });
   metrics.readyMs=performance.now()-began;

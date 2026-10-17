@@ -6,8 +6,8 @@
     "test": "node --test tests/*.test.mjs tests/controller/*.test.cjs"
   },
   "dependencies": {
-    "meikiocr-web": "github:bee-san/meikiocr-web#0431493cfc59534bdf9e48be95a9e43c21a206be",
-    "vite": "7.3.7"
+    "vite": "7.3.7",
+    "onnxruntime-web": "1.30.0"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.100",

@@ -25,3 +25,5 @@ Remaining limits:
 - New combined experiment distribution is GPL-3.0-only; original app code retains MIT, models LGPL-3.0, ORT MIT, OpenCV Apache-2.0, alignment helpers MIT, original UniDic notices retained. License originals, pinned model details, build scripts and corresponding application/library source archives are served alongside the experiment.
 
 Production adoption: defer until physical-device verification of startup, recognition, tracking and memory. The public experiment can be used independently without replacing the existing production app.
+
+Publication recovery: two local archive uploads were rejected as incomplete; local archives were verified complete before upload and were shorter afterwards. Source-only deployment first rejected the GitHub dependency as unsupported. The pinned upstream client/worker/tools were therefore vendored with hashes, source maps, licenses and corresponding source; dependencies were changed to public-registry ORT/Vite. The generated runtime JS/Worker hashes remained identical, and all 100 tests plus Chromium camera and WebKit source-image inference were rerun successfully.

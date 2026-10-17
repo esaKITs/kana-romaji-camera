@@ -50,7 +50,7 @@ await mkdir('.testing',{recursive:true});await writeFile('.testing/camera.html',
 await build();
 const lock=JSON.parse(await readFile('models.lock.json','utf8'));const dir=process.env.MODEL_DIR||'models';
 if(!process.env.MODEL_DIR){
- const r=spawnSync(process.execPath,['node_modules/meikiocr-web/tools/fetch-models.mjs','--out',dir],{stdio:'inherit'});if(r.status!==0)throw Error('Model fetch failed');
+ const r=spawnSync(process.execPath,['vendor/meikiocr-web/tools/fetch-models.mjs','--out',dir],{stdio:'inherit'});if(r.status!==0)throw Error('Model fetch failed');
 }
 const out='dist/ocr-assets';await mkdir(out,{recursive:true});const models=[];
 for(const model of lock.models.filter(m=>m.role!=='recognizer-vertical')){

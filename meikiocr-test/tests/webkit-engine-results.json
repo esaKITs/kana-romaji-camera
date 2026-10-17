@@ -6,8 +6,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "white",
-      "elapsedMs": 891,
-      "readyMs": 1150,
+      "elapsedMs": 785,
+      "readyMs": 1196,
       "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
       "regions": [
         {
@@ -80,8 +80,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "black",
-      "elapsedMs": 697,
-      "readyMs": 1150,
+      "elapsedMs": 650,
+      "readyMs": 1196,
       "text": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
       "regions": [
         {
@@ -164,8 +164,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "white",
-      "elapsedMs": 684,
-      "readyMs": 1150,
+      "elapsedMs": 655,
+      "readyMs": 1196,
       "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
       "regions": [
         {
