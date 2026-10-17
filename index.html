@@ -862,7 +862,7 @@ async function stillScan(){
    const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
    if(!stillMode||generation!==stillGeneration)return;
    const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:it.box.x0/variant.factor,y0:it.box.y0/variant.factor,x1:it.box.x1/variant.factor,y1:it.box.y1/variant.factor}}));
-   const changed=stillMerge(stillItems,found);stillStale=changed?0:stillStale+1;paint(stillItems);
+   const changed=stillMerge(stillItems,found);stillStale=changed?0:stillStale+1;if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);paint(stillItems);
    if(stillStale>=6)break;
   }
   // Process tap requests on the same frozen image; no moving-frame coordinates.
@@ -878,7 +878,7 @@ async function stillScan(){
     if(!stillMode||generation!==stillGeneration)break;
     const scale=crop.scale*variant.factor;
     const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>Math.abs((it.box.y0+it.box.y1)/2-request.y*source.height)<(crop.region.y1-crop.region.y0)/2);
-    stillMerge(stillItems,found);paint(stillItems);
+    stillMerge(stillItems,found);if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);paint(stillItems);
    }
    $('focus-marker').classList.remove('active');
   }
@@ -899,6 +899,8 @@ function enterStill(){
  stillFrame.width=stillSource.width;stillFrame.height=stillSource.height;stillFrame.getContext('2d').drawImage(stillSource,0,0);
  stillFrame.classList.add('visible');video.style.visibility='hidden';
  work.width=stillSource.width;work.height=stillSource.height;
+ wc.drawImage(stillSource,0,0,work.width,work.height);
+ sharedLabelColor=null;
  resetTracking();referenceCanvas=null;referenceItems=[];tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);
  stillStatus('Refining recognition…');stillButton();if(!busy)setTimeout(stillScan,0);
 }
