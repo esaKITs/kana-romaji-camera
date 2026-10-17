@@ -390,8 +390,8 @@ function paint(items){
   // OCR boxes spanning implausibly wide character cells can conceal kanji.
   const glyphCount=[...item.text].length;
   if(!item.focused&&glyphCount&&w/Math.max(1,h*glyphCount)>1.75)continue;
-  if(w<3||h<4)continue;
-  if(!kanaOnly.test(item.text))continue;
+  if(w<3||h<4){if(item.focused)console.debug('[Label skipped: tiny box]',item);continue;}
+  if(!kanaOnly.test(item.text)){if(item.focused)console.debug('[Label skipped: non-kana]',item);continue;}
   const output=contextualRomaji(item.text);
   if(!output||/[^a-zāīūēō'\\-]/i.test(output))continue;
   // Preserve OCR anchoring. Fit to the original word box instead of drifting across lines.
@@ -420,7 +420,7 @@ function paint(items){
   const y=c.cy;
   const rect={x0:x-c.bandW/2,y0:y-c.bandH/2,x1:x+c.bandW/2,y1:y+c.bandH/2};
   const obstruction=accepted.reduce((sum,p)=>sum+overlap(rect,p.rect),0);
-  if(obstruction>c.bandW*c.bandH*.08)continue;
+  if(obstruction>c.bandW*c.bandH*.08){console.debug('[Label skipped: overlap]',c.output);continue;}
   accepted.push({...c,x,y,rect});
  }
  for(const c of accepted){
@@ -943,15 +943,19 @@ async function stillScan(){
       for(const candidate of found){
        if(!kanaOnly.test(candidate.text))continue;
        candidate.focused=true;candidate.state='provisional';
-       const idx=stillItems.findIndex(old=>sameKanaRegion(old,candidate)&&old.state!=='confirmed');
-       if(idx>=0)stillItems.splice(idx,1);
+       // Explicit user selection supersedes automatic evidence, including confirmed guesses.
+       // Keep the OCR candidate independent from the automatic merge pipeline.
+       for(let i=stillItems.length-1;i>=0;i--){
+        if(sameKanaRegion(stillItems[i],candidate))stillItems.splice(i,1);
+       }
       }
-      stillMerge(stillItems,found,'focused-frame');
-      // Keep the user-selected OCR result visible even when other OCR passes disagree.
+      // Focused results are not sent through stillMerge, whose automatic
+      // confirmation/protection rules may discard explicitly selected text.
       for(const candidate of found){
-       const match=stillItems.find(it=>it.text===candidate.text&&sameKanaRegion(it,candidate));
-       if(match)match.focused=true;
+       if(!kanaOnly.test(candidate.text))continue;
+       stillItems.push({...candidate,focused:true,state:'confirmed',locked:true,focusId:request.id});
       }
+      console.debug('[Focused scan]',{id:request.id,raw:raw.map(x=>({text:x.text,confidence:x.confidence,box:x.box})),selected:found.map(x=>({text:x.text,box:x.box})),retained:stillItems.filter(x=>x.focusId===request.id).map(x=>x.text)});
      }
      if(pass===2&&!focusedFound&&stillMode){focusedScanFailure=true;stillStatus('No kana detected in selection · Try a wider selection')}
      if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
