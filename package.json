@@ -1,0 +1,1 @@
+{"name":"kana-romaji-camera","private":true,"scripts":{"test":"node --test tests/recognition.test.cjs"},"devDependencies":{"@napi-rs/canvas":"0.1.100"}}

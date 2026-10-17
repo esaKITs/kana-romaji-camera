@@ -155,7 +155,7 @@ function diagnoseKanaExtraction(data,finalItems){
   +'Final displayed ま/マ regions: '+(displayed.map(it=>JSON.stringify(it.text)+' conf='+Math.round(it.confidence??50)).join(', ')||'(none)')+'\n'
   +'Note: later OCR retries may replace the primary results; compare the final Kana list above.';
 }
-function extract(data){
+function extract(data,image=work){
  const lines=(data.blocks||[]).flatMap(b=>(b.paragraphs||[]).flatMap(p=>p.lines||[])),out=[];
  const kana=/[ぁ-ゖァ-ヺー]/,runs=/[ぁ-ゖァ-ヺー]+/g;
  const union=(a,b)=>({x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)});
@@ -229,7 +229,7 @@ function extract(data){
   }
   for(const g of groups){const len=[...g.text].length,conf=g.confidence||0;if((len===1&&conf<65)||(len===2&&conf<38))continue;out.push({text:dictionaryCandidate(g.text),box:g.box,angle:0,confidence:conf})}
  }
- return out.filter(p=>{const b=p.box,w=b.x1-b.x0,h=b.y1-b.y0;return h>=8&&w>=5&&w/h>.18&&w/h<24&&p.box.x0>=0&&p.box.y0>=0&&p.box.x1<=work.width&&p.box.y1<=work.height&&p.box.x1-p.box.x0>=3})
+ return out.filter(p=>{const b=p.box,w=b.x1-b.x0,h=b.y1-b.y0;return h>=8&&w>=5&&w/h>.18&&w/h<24&&p.box.x0>=0&&p.box.y0>=0&&p.box.x1<=image.width&&p.box.y1<=image.height&&p.box.x1-p.box.x0>=3})
 }
 function backgroundAt(x,y,w,h){const pts=[[x-3,y+h/2],[x+w+3,y+h/2],[x+w/2,y-3],[x+w/2,y+h+3]];const colors=[];for(const [px,py] of pts){if(px<0||py<0||px>=work.width||py>=work.height)continue;const d=wc.getImageData(Math.round(px),Math.round(py),1,1).data;colors.push([d[0],d[1],d[2]])}if(!colors.length)return [240,240,240];return [0,1,2].map(i=>Math.round(colors.reduce((s,c)=>s+c[i],0)/colors.length))}
 
@@ -279,7 +279,7 @@ function progressStep(message){if(hasShownLabels){progress.hidden=true;return}pr
 function lineAligned(items){
  // Display-only grouping: never reject OCR items or change their recognized text.
  // OCR glyph boxes vary in height, especially around kanji and small kana.
- const unit=work.width/Math.max(1,overlay.getBoundingClientRect().width||stage.getBoundingClientRect().width);
+ const unit=(stillMode&&stillSource?stillSource.width:work.width)/Math.max(1,stage.getBoundingClientRect().width);
  const maxHeight=21*unit*1.55;
  const median=values=>{const v=[...values].sort((a,b)=>a-b);return v[Math.floor(v.length/2)]};
  const valid=items.filter(it=>it.box&&it.box.y1>it.box.y0);
@@ -351,7 +351,7 @@ function captureSharedLabelColor(canvas,items){
  if(sharedLabelColor)return;
  // Select one representative paper color from the text regions, rather than
  // from dark areas outside the printed page. Freeze it until camera restart.
- const colors=(items||[]).filter(it=>it.box).map(it=>sampledPaperColor(it.box));
+ const colors=(items||[]).filter(it=>it.box).map(it=>sampledPaperColor(it.box,canvas));
  if(colors.length){
   sharedLabelColor=[0,1,2].map(channel=>{
    const values=colors.map(color=>color[channel]).sort((a,b)=>a-b);
@@ -362,12 +362,12 @@ function captureSharedLabelColor(canvas,items){
  sharedLabelColor=[245,245,245];
 }
 
-function sampledPaperColor(b){
- if(!work.width||!work.height)return [245,245,245];
- const x0=Math.max(0,Math.floor(b.x0)),x1=Math.min(work.width,Math.ceil(b.x1));
- const y0=Math.max(0,Math.floor(b.y0)),y1=Math.min(work.height,Math.ceil(b.y1));
+function sampledPaperColor(b,image=work){
+ if(!image.width||!image.height)return [245,245,245];
+ const x0=Math.max(0,Math.floor(b.x0)),x1=Math.min(image.width,Math.ceil(b.x1));
+ const y0=Math.max(0,Math.floor(b.y0)),y1=Math.min(image.height,Math.ceil(b.y1));
  if(x1<=x0||y1<=y0)return [245,245,245];
- const pixels=wc.getImageData(x0,y0,x1-x0,y1-y0).data;
+ const pixels=image.getContext('2d',{willReadFrequently:true}).getImageData(x0,y0,x1-x0,y1-y0).data;
  const samples=[[],[],[]],w=x1-x0,h=y1-y0;
  for(let y=0;y<h;y+=Math.max(1,Math.floor(h/5)))for(let x=0;x<w;x+=Math.max(1,Math.floor(w/12))){
   if(y>h*.26&&y<h*.74&&x>w*.08&&x<w*.92)continue;
@@ -379,7 +379,8 @@ function sampledPaperColor(b){
 function paint(items){
  if(items.length){hasShownLabels=true;if(!stillMode)progress.hidden=true}
  items=lineAligned(items);
- overlay.width=work.width;overlay.height=work.height;
+ const image=stillMode&&stillSource?stillSource:work;
+ overlay.width=image.width;overlay.height=image.height;
  ctx.clearRect(0,0,overlay.width,overlay.height);
  ctx.textBaseline='middle';
  const unit=overlay.width/Math.max(1,stage.getBoundingClientRect().width);
@@ -393,7 +394,7 @@ function paint(items){
   if(w<3||h<4){if(item.focused)console.debug('[Label skipped: tiny box]',item);continue;}
   if(!kanaOnly.test(item.text)){if(item.focused)console.debug('[Label skipped: non-kana]',item);continue;}
   const output=contextualRomaji(item.text);
-  if(!output||/[^a-zāīūēō'\\-]/i.test(output))continue;
+  if(!output||/[^a-zāīūēō' -]/i.test(output))continue;
   // Preserve OCR anchoring. Fit to the original word box instead of drifting across lines.
   const allowedWidth=w;
   let font=Math.min(h*.78,Math.max(desiredFont,h*.68));
@@ -441,8 +442,8 @@ function paint(items){
  }
 }
 
-$('debug').addEventListener('click',()=>{showPositionGuides=!showPositionGuides;$('debug').setAttribute('aria-pressed',String(showPositionGuides));$('debug').textContent=showPositionGuides?'Hide position guides':'Show position guides';paint(tracks.length?tracks:previousItems)});
-function alignOverlay(){if(!video.videoWidth)return;const r=video.getBoundingClientRect(),scale=Math.min(r.width/video.videoWidth,r.height/video.videoHeight),w=video.videoWidth*scale,h=video.videoHeight*scale;overlay.style.left=(r.width-w)/2+'px';overlay.style.top=(r.height-h)/2+'px';overlay.style.width=w+'px';overlay.style.height=h+'px'}
+$('debug').addEventListener('click',()=>{showPositionGuides=!showPositionGuides;$('debug').setAttribute('aria-pressed',String(showPositionGuides));$('debug').textContent=showPositionGuides?'Hide position guides':'Show position guides';paint(stillMode?stillItems:tracks)});
+function alignOverlay(){overlay.style.left='0px';overlay.style.top='0px';overlay.style.width='100%';overlay.style.height='100%'}
 let tracks=[],lastFrame=null,frameChanged=false;
 function imageSignature(){const c=document.createElement('canvas');c.width=16;c.height=12;const q=c.getContext('2d',{willReadFrequently:true});q.drawImage(work,0,0,16,12);const d=q.getImageData(0,0,16,12).data;const out=[];for(let i=0;i<d.length;i+=4)out.push((d[i]*.299+d[i+1]*.587+d[i+2]*.114));return out}
 function motionLevel(next){if(!lastFrame)return 0;let diff=0;for(let i=0;i<next.length;i++)diff+=Math.abs(next[i]-lastFrame[i]);return diff/next.length}
@@ -451,7 +452,7 @@ function updateTracks(items){const now=performance.now(),used=new Set();for(cons
 // Lightweight on-device block matching. Coordinates are in OCR canvas pixels.
 let trackingTimer=null,trackPrev=null,trackingRevision=0,trackingFailures=0;
 const trackCanvas=document.createElement('canvas');trackCanvas.width=160;trackCanvas.height=120;const trackCtx=trackCanvas.getContext('2d',{willReadFrequently:true});
-function trackingFrame(){if(!active||!video.videoWidth)return null;trackCtx.drawImage(video,0,0,160,120);const rgba=trackCtx.getImageData(0,0,160,120).data,gray=new Uint8Array(160*120);for(let i=0;i<gray.length;i++)gray[i]=(.299*rgba[i*4]+.587*rgba[i*4+1]+.114*rgba[i*4+2])|0;return gray}
+function trackingFrame(source=video){if(!active||!video.videoWidth)return null;trackCtx.drawImage(source,0,0,160,120);const rgba=trackCtx.getImageData(0,0,160,120).data,gray=new Uint8Array(160*120);for(let i=0;i<gray.length;i++)gray[i]=(.299*rgba[i*4]+.587*rgba[i*4+1]+.114*rgba[i*4+2])|0;return gray}
 function blockMotion(prev,cur){const pts=[];for(let y=20;y<=100;y+=20)for(let x=20;x<=140;x+=20){let mean=0,v=0;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)mean+=prev[(y+yy)*160+x+xx];mean/=25;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)v+=(prev[(y+yy)*160+x+xx]-mean)**2;if(v/25<110)continue;let best=Infinity,bx=0,by=0;for(let dy=-7;dy<=7;dy++)for(let dx=-7;dx<=7;dx++){let err=0;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)err+=Math.abs(prev[(y+yy)*160+x+xx]-cur[(y+yy+dy)*160+x+xx+dx]);if(err<best){best=err;bx=dx;by=dy}}if(best/25<33)pts.push({x,y,u:x+bx,v:y+by})}if(pts.length<4)return null;let best=null,count=0;for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const p=pts[i],q=pts[j],dx=q.x-p.x,dy=q.y-p.y,den=dx*dx+dy*dy;if(den<300)continue;const du=q.u-p.u,dv=q.v-p.v,A=(dx*du+dy*dv)/den,B=(dx*dv-dy*du)/den,tx=p.u-A*p.x+B*p.y,ty=p.v-B*p.x-A*p.y;if(Math.hypot(A,B)<.8||Math.hypot(A,B)>1.2)continue;const n=pts.filter(t=>Math.hypot(A*t.x-B*t.y+tx-t.u,B*t.x+A*t.y+ty-t.v)<2.5).length;if(n>count){count=n;best={A,B,tx,ty}}}return count>=Math.max(4,Math.ceil(pts.length*.55))?best:null}
 function moveBox(b,m){const sx=work.width/160,sy=work.height/120,pts=[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]].map(([x,y])=>{const u=x/sx,v=y/sy;return [(m.A*u-m.B*v+m.tx)*sx,(m.B*u+m.A*v+m.ty)*sy]});return {x0:Math.min(...pts.map(p=>p[0])),y0:Math.min(...pts.map(p=>p[1])),x1:Math.max(...pts.map(p=>p[0])),y1:Math.max(...pts.map(p=>p[1]))}}
 // MIT-licensed feature matcher tracks the scanned page as one plane.
@@ -491,10 +492,10 @@ function flowPrepare(){
   return true;
  }finally{src?.delete();gray?.delete();corners?.delete()}
 }
-function flowLocate(){
+function flowLocate(target=video){
  if(!flowPrepare())return null;
  const cv=window.cv,{W,H,coords,grayPixels}=flowCache;
- flowLive.width=W;flowLive.height=H;flowLive.getContext('2d').drawImage(video,0,0,W,H);
+ flowLive.width=W;flowLive.height=H;flowLive.getContext('2d').drawImage(target,0,0,W,H);
  let ref=null,rgba=null,live=null,prevPts=null,nextPts=null,status=null,errors=null,srcPts=null,dstPts=null,Hmat=null,mask=null;
  try{
   ref=new cv.Mat(H,W,cv.CV_8UC1);ref.data.set(grayPixels);
@@ -520,16 +521,16 @@ function flowLocate(){
   if(m.some(v=>!Number.isFinite(v)))return null;
   const center=m[6]*W/2+m[7]*H/2+m[8];
   if(Math.abs(center)<.15)return null;
-  return {m,W,H};
+  return {m,W,H,refW:referenceCanvas.width,refH:referenceCanvas.height};
  }finally{for(const x of [ref,rgba,live,prevPts,nextPts,status,errors,srcPts,dstPts,Hmat,mask])x?.delete()}
 }
-function flowWarpBox(b,t){
- const {m,W,H}=t,refW=referenceCanvas.width,refH=referenceCanvas.height;
+function flowWarpBox(b,t,output=work){
+ const {m,W,H,refW=referenceCanvas.width,refH=referenceCanvas.height}=t;
  const corners=[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]];
  const pts=corners.map(([x,y])=>{
   const u=x*W/refW,v=y*H/refH,d=m[6]*u+m[7]*v+m[8];
   if(Math.abs(d)<.05)return null;
-  return [(m[0]*u+m[1]*v+m[2])/d*work.width/W,(m[3]*u+m[4]*v+m[5])/d*work.height/H];
+  return [(m[0]*u+m[1]*v+m[2])/d*output.width/W,(m[3]*u+m[4]*v+m[5])/d*output.height/H];
  });
  if(pts.some(p=>!p||!p.every(Number.isFinite)))return null;
  return {x0:Math.min(...pts.map(p=>p[0])),y0:Math.min(...pts.map(p=>p[1])),x1:Math.max(...pts.map(p=>p[0])),y1:Math.max(...pts.map(p=>p[1]))};
@@ -553,6 +554,7 @@ async function trackTick(){
 }
 function displayItemsPresent(){return tracks.length>0}
 function resetTracking(){flowReset();if(trackingTimer!==null)clearTimeout(trackingTimer);trackingTimer=null;trackPrev=null;trackingRevision++;trackingFailures=0}
+function resumeTracking(){resetTracking();if(active&&!stillMode)trackTick()}
 const enhanced=document.createElement('canvas'),ec=enhanced.getContext('2d',{willReadFrequently:true});
 function averageBrightness(){const w=work.width,h=work.height;const d=wc.getImageData(0,0,w,h).data;let sum=0,n=0;for(let y=0;y<h;y+=12)for(let x=0;x<w;x+=12){let k=(y*w+x)*4;sum+=.2126*d[k]+.7152*d[k+1]+.0722*d[k+2];n++}return sum/Math.max(n,1)}
 function prepareEnhanced(invert){const factor=1.5;enhanced.width=Math.round(work.width*factor);enhanced.height=Math.round(work.height*factor);ec.imageSmoothingEnabled=true;ec.imageSmoothingQuality='high';ec.drawImage(work,0,0,enhanced.width,enhanced.height);if(invert){const img=ec.getImageData(0,0,enhanced.width,enhanced.height);for(let i=0;i<img.data.length;i+=4){img.data[i]=255-img.data[i];img.data[i+1]=255-img.data[i+1];img.data[i+2]=255-img.data[i+2]}ec.putImageData(img,0,0)}}
@@ -665,6 +667,7 @@ async function retryLargeLines(data,items){
  try{
   await worker.setParameters({tessedit_pageseg_mode:'7'});
   for(const line of candidates){
+   if(!active||stillMode)return items;
    const b=line.bbox,margin=Math.max(4,Math.round((b.y1-b.y0)*.16));
    const x=Math.max(0,Math.floor(b.x0-margin)),y=Math.max(0,Math.floor(b.y0-margin));
    const right=Math.min(work.width,Math.ceil(b.x1+margin)),bottom=Math.min(work.height,Math.ceil(b.y1+margin));
@@ -672,7 +675,7 @@ async function retryLargeLines(data,items){
    const crop=document.createElement('canvas');crop.width=right-x;crop.height=bottom-y;
    crop.getContext('2d').drawImage(work,x,y,crop.width,crop.height,0,0,crop.width,crop.height);
    const res=await worker.recognize(crop,{}, {text:true,blocks:true});
-   const fresh=rebuildRows(extract(res.data)).map(it=>({...it,box:{x0:it.box.x0+x,y0:it.box.y0+y,x1:it.box.x1+x,y1:it.box.y1+y}}));
+   const fresh=rebuildRows(extract(res.data,crop)).map(it=>({...it,box:{x0:it.box.x0+x,y0:it.box.y0+y,x1:it.box.x1+x,y1:it.box.y1+y}}));
    const inside=it=>{const cy=(it.box.y0+it.box.y1)/2,cx=(it.box.x0+it.box.x1)/2;return cx>=x&&cx<=right&&cy>=y&&cy<=bottom};
    const old=best.filter(inside),replacement=fresh.filter(inside);
    // Accept only meaningful improvements, preserving the baseline otherwise.
@@ -702,7 +705,7 @@ async function retryIndependentLargeKana(items,myId){
    crop.getContext('2d').drawImage(work,0,y,w,bandH,0,0,w,bandH);
    const result=await worker.recognize(crop,{}, {text:true,blocks:true});
    if(!active||myId!==runId)return items;
-   for(const it of rebuildRows(extract(result.data))){
+   for(const it of rebuildRows(extract(result.data,crop))){
     const b=it.box,height=b.y1-b.y0;
     if(height<Math.max(28,h*.045)||(it.confidence??0)<45)continue;
     const mapped={...it,box:{x0:b.x0,x1:b.x1,y0:b.y0+y,y1:b.y1+y}};
@@ -780,30 +783,17 @@ function inverseMotion(m){
  if(!Number.isFinite(det)||det<.0001)return null;
  return {A:m.A/det,B:-m.B/det,tx:-(m.A*m.tx+m.B*m.ty)/det,ty:(m.B*m.tx-m.A*m.ty)/det};
 }
-function protectRecognized(items,oldProjected){
- const next=[],matched=new Set();
- for(const it of items){
-  const old=oldProjected.find(p=>sameKanaRegion(p,it));
-  if(!old){next.push({...it,votes:1,state:kanaThreshold(it)===1?'provisional':'pending'});continue}
-  matched.add(old);
-  if(old.state==='confirmed'){next.push({...old,box:{...it.box}});continue}
-  const merged=evidenceMerge(old,it,'live-'+Math.floor(performance.now()/250));
-  const required=kanaThreshold(merged);
-  const votes=merged.votes||1;
-  const state=merged.state==='confirmed'?'confirmed':votes>=Math.max(2,required)&&Number.isFinite(required)?'confirmed':required===1?'provisional':'pending';
-  next.push({...merged,state});
- }
- for(const old of oldProjected){
-  if(matched.has(old))continue;
-  if(old.state==='confirmed'||old.state==='provisional')next.push(old);
- }
- // Suppress fragment labels overlapping a protected whole phrase.
- const result=next.filter((it,i)=>!next.some((other,j)=>i!==j&&other.state==='confirmed'&&it.state!=='confirmed'&&sameKanaRegion(it,other)));
+function protectRecognized(items,oldProjected,group){
+ const result=oldProjected.map(cloneRecognitionItem);
+ stillMerge(result,items.filter(it=>!it.focused),group,false);
+ for(const candidate of items.filter(it=>it.focused))mergeFocused(result,[{...candidate,pass:0}],{id:candidate.focusId},group);
  protectedKana=result.slice(0,80);
  historyLastVerified=performance.now();
- kanaHistory=protectedKana.map(it=>({text:it.text,box:{...it.box},confidence:it.confidence,votes:it.votes,state:it.state})); 
+ kanaHistory=protectedKana.map(cloneRecognitionItem);
  return protectedKana;
 }
+let captureSerial=0;
+
 let scanRequested=false,reverseScanCount=0,manualScanPending=false,focusRequest=null,focusSerial=0;
 let stillMode=false,stillPending=false,stillBusy=false,stillItems=[],stillSource=null,stillGeneration=0;
 let stillPaused=false,stillPass=0,stillStale=0,stillImproved=0,stillUncertain=0;
@@ -829,7 +819,7 @@ function focusCrop(image,request){
  const x0=Math.max(0,Math.min(w-cropW,centerX-cropW/2)),y0=Math.max(0,Math.min(h-cropH,centerY-cropH/2));
  const canvas=document.createElement('canvas');canvas.width=Math.round(cropW*2);canvas.height=Math.round(cropH*2);
  canvas.getContext('2d').drawImage(image,x0,y0,cropW,cropH,0,0,canvas.width,canvas.height);
- return {canvas,x0,y0,scale:2,region:{x0,y0,x1:x0+cropW,y1:y0+cropH}};
+ return {canvas,x0,y0,scale:2,scaleX:canvas.width/cropW,scaleY:canvas.height/cropH,region:{x0,y0,x1:x0+cropW,y1:y0+cropH}};
 }
 
 // Shared, session-only evidence. Never transfer boxes without matching the captured image.
@@ -847,52 +837,123 @@ function imageMatches(a,b){
  let diff=0;for(let i=0;i<a.length;i++)diff+=Math.abs(a[i]-b[i]);
  return diff/a.length<14;
 }
+function cloneRecognitionItem(it){
+ return {...it,box:{...it.box},observedGroups:it.observedGroups?[...it.observedGroups]:undefined,support:it.support?Object.fromEntries(Object.entries(it.support).map(([key,v])=>[key,{...v,groups:[...v.groups]}])):undefined};
+}
+function validRecognitionItem(it,image){
+ const b=it.box;
+ return b&&[b.x0,b.y0,b.x1,b.y1].every(Number.isFinite)&&b.x1>b.x0&&b.y1>b.y0&&b.x0>=0&&b.y0>=0&&b.x1<=image.width&&b.y1<=image.height;
+}
 function rememberRecognition(canvas,items,source){
  if(!canvas||!items.length)return;
  const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;copy.getContext('2d').drawImage(canvas,0,0);
- sharedRecognition={canvas:copy,items:items.slice(0,100).map(it=>({...it,box:{...it.box},source:it.source||source})),source,capturedAt:performance.now(),signature:imageFingerprint(copy)};
+ sharedRecognition={canvas:copy,items:items.filter(it=>validRecognitionItem(it,copy)).slice(0,100).map(cloneRecognitionItem),source,capturedAt:performance.now(),signature:imageFingerprint(copy)};
+}
+function identicalImage(a,b){
+ // A coarse page fingerprint is NOT evidence of coordinate correspondence.
+ if(!a||!b||a.width!==b.width||a.height!==b.height)return false;
+ const x=a.getContext('2d').getImageData(0,0,a.width,a.height).data;
+ const y=b.getContext('2d').getImageData(0,0,b.width,b.height).data;
+ for(let i=0;i<x.length;i++)if(x[i]!==y[i])return false;
+ return true;
+}
+function projectRecognition(previous,target){
+ if(!previous.canvas||!previous.items.length)return [];
+ if(identicalImage(previous.canvas,target))return previous.items.map(cloneRecognitionItem);
+ // Register directly to the immutable target capture. Never invert an AABB
+ // or approximate a rotation/perspective change by width/height scaling.
+ const saved={referenceCanvas,referenceItems,flowCache,flowVersion};
+ try{
+  referenceCanvas=previous.canvas;referenceItems=previous.items;flowCache=null;flowVersion++;
+  const transform=flowLocate(target);
+  if(!transform)return [];
+  return previous.items.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,transform,target)}))
+   .filter(it=>validRecognitionItem(it,target));
+ }catch(e){console.warn('Recognition registration unavailable:',e);return []}
+ finally{({referenceCanvas,referenceItems,flowCache,flowVersion}=saved)}
 }
 function transferToStill(canvas){
- const previous=sharedRecognition;
- if(!previous.items.length||performance.now()-previous.capturedAt>12000||!imageMatches(previous.signature,imageFingerprint(canvas)))return [];
- const sx=canvas.width/previous.canvas.width,sy=canvas.height/previous.canvas.height;
- return previous.items.map(it=>({...it,box:{x0:it.box.x0*sx,x1:it.box.x1*sx,y0:it.box.y0*sy,y1:it.box.y1*sy},state:it.state||'pending',source:it.source||previous.source}));
+ if(performance.now()-sharedRecognition.capturedAt>HISTORY_TTL_MS)return [];
+ return projectRecognition(sharedRecognition,canvas);
 }
-function candidateSupport(it){return it.support||{[it.text]:{text:it.text,groups:[it.source||'initial'],confidence:it.confidence||50}}}
+function candidateSupport(it){
+ const initial=it.support||{[it.text]:{text:it.text,groups:[it.source||'initial'],confidence:it.confidence??50}};
+ return Object.fromEntries(Object.entries(initial).map(([key,v])=>[key,{...v,groups:[...v.groups]}]));
+}
 function evidenceMerge(old,candidate,group){
+ // Partial/expanded boxes are not interchangeable. Keep a well-supported
+ // whole phrase until OCR supplies a comparable full region.
+ const area=b=>(b.x1-b.x0)*(b.y1-b.y0),ratio=area(candidate.box)/area(old.box);
+ if(old.text!==candidate.text&&(ratio<.65||ratio>1.55))return cloneRecognitionItem(old);
  const support=candidateSupport(old),name=candidate.text;
+ const observedGroups=[...new Set([...(old.observedGroups||Object.values(support).flatMap(v=>v.groups)),group])].slice(-6);
+ for(const record of Object.values(support))record.groups=record.groups.filter(g=>observedGroups.includes(g));
  if(!support[name])support[name]={text:name,groups:[],confidence:0};
  const record=support[name];
  if(!record.groups.includes(group))record.groups.push(group);
- record.confidence=Math.max(record.confidence,candidate.confidence||0);
- const existing=support[old.text]||{groups:[],confidence:old.confidence||50};
+ record.groups=record.groups.slice(-6);
+ record.confidence=Math.max(record.confidence,candidate.confidence??0);
+ const existing=support[old.text]||{groups:[],confidence:old.confidence??50};
  const newEvidence=record.groups.length,oldEvidence=existing.groups.length;
- // Variant OCR on one frozen frame counts as a single evidence group.
- // A conflicting candidate needs independent evidence and a clear lead.
  const switchAllowed=name!==old.text&&newEvidence>=2&&newEvidence>oldEvidence&&record.confidence>=Math.max(40,existing.confidence-10);
- if(switchAllowed)return {...candidate,box:{...candidate.box},support,source:group,state:'confirmed',votes:newEvidence};
- return {...old,support,votes:Math.max(old.votes||1,oldEvidence),state:oldEvidence>=2?'confirmed':old.state||'pending'};
+ // A tentative first reading can improve on the SAME frozen image, but
+ // repeated variants must never pretend to be independent confirmations.
+ const tentativeImprovement=name!==old.text&&old.state!=='confirmed'&&!old.focused&&oldEvidence===1&&record.confidence>=existing.confidence+15;
+ const chosen=switchAllowed||tentativeImprovement?{...candidate}:old.text===name?{...old,box:{...candidate.box},confidence:record.confidence}:old;
+ const winner=support[chosen.text],votes=winner.groups.length;
+ const required=kanaThreshold({...chosen,confidence:winner.confidence});
+ const bounded=Object.fromEntries(Object.entries(support).sort(([a,x],[b,y])=>(b===chosen.text)-(a===chosen.text)||y.groups.length-x.groups.length||y.confidence-x.confidence).slice(0,5));
+ return {...cloneRecognitionItem(chosen),support:bounded,observedGroups,votes,state:votes>=Math.max(2,required)||chosen.state==='confirmed'?'confirmed':'provisional'};
 }
-function stillMerge(items,newItems,group='still-frame'){
+function stillMerge(items,newItems,group='still-frame',notify=true){
  let updates=0;
  for(const candidate of newItems){
-  if(!candidate.box||!kanaOnly.test(candidate.text)||(!candidate.focused&&candidate.confidence<24))continue;
+  if(!candidate.box||!kanaOnly.test(candidate.text)||(candidate.confidence??0)<24)continue;
   const matches=items.filter(it=>sameKanaRegion(it,candidate));
   if(!matches.length){
-   const support={[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence||50}};
-   items.push({...candidate,support,source:group,state:'pending',votes:1});updates++;continue;
+   items.push({...cloneRecognitionItem(candidate),support:{[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence??50}},source:group,state:'provisional',votes:1});updates++;continue;
   }
-  const best=matches.find(it=>it.state==='confirmed')||matches[0];
-  if(best.focused&&!candidate.focused)continue;
+  const best=matches.find(it=>it.focused)||matches.find(it=>it.state==='confirmed')||matches[0];
+  if(best.focused&&!candidate.focused&&group.startsWith('still-'))continue;
   const next=evidenceMerge(best,candidate,group);
   if(next.text!==best.text)updates++;
   items.splice(items.indexOf(best),1,next);
  }
- if(updates&&stillMode)flashScanUpdate();
- stillImproved+=updates;
- stillUncertain=items.filter(it=>it.state!=='confirmed').length;
+ if(notify){
+  if(updates&&stillMode)flashScanUpdate();
+  stillImproved+=updates;stillUncertain=items.filter(it=>it.state!=='confirmed').length;
+ }
  return updates;
 }
+function mergeFocused(items,observations,request,group){
+ // Select after ALL variants, so a weak last pass cannot erase a good first.
+ const pool=[];
+ for(const candidate of observations){
+  if(!kanaOnly.test(candidate.text)||(candidate.confidence??0)<35)continue;
+  const found=pool.find(p=>p.text===candidate.text&&sameKanaRegion(p,candidate));
+  if(found){found.passes.add(candidate.pass);if(candidate.confidence>found.confidence){found.box={...candidate.box};found.confidence=candidate.confidence}}
+  else pool.push({...cloneRecognitionItem(candidate),passes:new Set([candidate.pass])});
+ }
+ pool.sort((a,b)=>b.passes.size-a.passes.size||b.confidence-a.confidence);
+ const accepted=[];
+ for(const candidate of pool){
+  if(accepted.some(it=>sameKanaRegion(it,candidate)))continue;
+  if(candidate.passes.size<2&&candidate.confidence<60)continue;
+  const conflicts=items.filter(it=>sameKanaRegion(it,candidate));
+  if(conflicts.some(it=>it.text.includes(candidate.text)&&it.text.length>candidate.text.length))continue;
+  if(conflicts.some(it=>it.focused&&it.text!==candidate.text&&candidate.passes.size<2))continue;
+  const same=conflicts.find(it=>it.text===candidate.text&&it.focusId===request.id);
+  if(same){accepted.push({...evidenceMerge(same,candidate,group),focused:true,focusId:request.id});continue}
+  const {passes,...reading}=candidate;
+  accepted.push({...reading,focused:true,state:'provisional',locked:true,focusId:request.id,source:group,support:{[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence}},votes:1});
+ }
+ for(const candidate of accepted){
+  for(let i=items.length-1;i>=0;i--)if(sameKanaRegion(items[i],candidate))items.splice(i,1);
+  items.push(candidate);
+ }
+ return accepted.length;
+}
+
 function stillImageVariant(source,variant){
  const c=document.createElement('canvas'),factor=variant%3===0?1:variant%3===1?1.6:2;
  c.width=Math.round(source.width*factor);c.height=Math.round(source.height*factor);
@@ -904,6 +965,7 @@ async function stillScan(){
  if(!active||!stillMode||stillPaused||busy||stillBusy||!stillSource)return;
  stillPending=false;stillBusy=true;stillError=false;stillButton();
  const generation=stillGeneration,source=stillSource;let focusedScanFailure=false;
+ work.width=source.width;work.height=source.height;wc.drawImage(source,0,0);
  try{
   if(!worker){stillStatus('Preparing Japanese OCR…');if(!window.Tesseract)throw Error('OCR library unavailable');worker=await Tesseract.createWorker('jpn',1)}
   if(!stillMode||generation!==stillGeneration)return;
@@ -912,7 +974,7 @@ async function stillScan(){
    if(focusRequest){
     const request=focusRequest;focusRequest=null;focusedScanning=true;setScanVisual('focused');
     const crop=focusCrop(source,request);
-    let focusedFound=0;
+    let focusedFound=0;const observations=[];
     const targetY=request.y*source.height;
     const band=request.selection?(crop.region.y1-crop.region.y0):Math.max(18,(crop.region.y1-crop.region.y0)*.28);
     for(let pass=0;pass<3;pass++){
@@ -922,44 +984,21 @@ async function stillScan(){
      await worker.setParameters({tessedit_pageseg_mode:pass===0?'7':'6'});
      const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
      if(!stillMode||generation!==stillGeneration||stillPaused||focusRequest)break;
-     const scale=crop.scale*variant.factor;
-     let raw=extract(result.data);
-     // Some Tesseract builds return line text without word/symbol boxes.
-     // Use actual OCR text as a fallback, never an invented transcription.
-     if(!raw.length&&result.data.text){
-      const runs=[...result.data.text.matchAll(/[ぁ-ゖァ-ヺー]+/g)];
-      if(runs.length===1){
-       const t=runs[0][0],cw=variant.canvas.width,ch=variant.canvas.height;
-       raw=[{text:t,confidence:35,box:{x0:cw*.06,y0:ch*.10,x1:cw*.94,y1:ch*.90}}];
-      }
-     }
-     const found=rebuildRows(raw).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scale,y0:crop.y0+it.box.y0/scale,x1:crop.x0+it.box.x1/scale,y1:crop.y0+it.box.y1/scale}})).filter(it=>{
+     const scaleX=crop.scaleX*variant.canvas.width/crop.canvas.width,scaleY=crop.scaleY*variant.canvas.height/crop.canvas.height;
+     let raw=extract(result.data,variant.canvas);
+     const found=rebuildRows(raw).map(it=>({...it,box:{x0:crop.x0+it.box.x0/scaleX,y0:crop.y0+it.box.y0/scaleY,x1:crop.x0+it.box.x1/scaleX,y1:crop.y0+it.box.y1/scaleY}})).filter(it=>{
       const cx=(it.box.x0+it.box.x1)/2,cy=(it.box.y0+it.box.y1)/2;
-      return cx>=crop.region.x0-2&&cx<=crop.region.x1+2&&cy>=crop.region.y0-2&&cy<=crop.region.y1+2;
+      const sel=request.selection;
+      return cx>=crop.region.x0&&cx<=crop.region.x1&&Math.abs(cy-targetY)<=band/2&&(!sel||(cx>=sel.x0*source.width&&cx<=sel.x1*source.width&&cy>=sel.y0*source.height&&cy<=sel.y1*source.height));
      });
-     if(found.length){
-      focusedFound+=found.length;focusedScanFailure=false;
-      // Explicit selection has priority over previous automatic guesses in this region.
-      for(const candidate of found){
-       if(!kanaOnly.test(candidate.text))continue;
-       candidate.focused=true;candidate.state='provisional';
-       // Explicit user selection supersedes automatic evidence, including confirmed guesses.
-       // Keep the OCR candidate independent from the automatic merge pipeline.
-       for(let i=stillItems.length-1;i>=0;i--){
-        if(sameKanaRegion(stillItems[i],candidate))stillItems.splice(i,1);
-       }
-      }
-      // Focused results are not sent through stillMerge, whose automatic
-      // confirmation/protection rules may discard explicitly selected text.
-      for(const candidate of found){
-       if(!kanaOnly.test(candidate.text))continue;
-       stillItems.push({...candidate,focused:true,state:'confirmed',locked:true,focusId:request.id});
-      }
-      console.debug('[Focused scan]',{id:request.id,raw:raw.map(x=>({text:x.text,confidence:x.confidence,box:x.box})),selected:found.map(x=>({text:x.text,box:x.box})),retained:stillItems.filter(x=>x.focusId===request.id).map(x=>x.text)});
-     }
-     if(pass===2&&!focusedFound&&stillMode){focusedScanFailure=true;stillStatus('No kana detected in selection · Try a wider selection')}
-     if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
-     paint(stillItems);
+     observations.push(...found.map(it=>({...it,pass})));
+
+    }
+    if(stillMode&&generation===stillGeneration&&!stillPaused&&!focusRequest){
+     focusedFound=mergeFocused(stillItems,observations,request,'still-'+generation);
+     focusedScanFailure=!focusedFound;
+     if(focusedFound){rememberRecognition(source,stillItems,'still-frame');paint(stillItems);flashScanUpdate()}
+     else stillStatus('No reliable kana detected in selection · Try a wider selection');
     }
     focusedScanning=false;
     if(!focusRequest)$('focus-marker').classList.remove('active');
@@ -975,20 +1014,23 @@ async function stillScan(){
    const result=await worker.recognize(variant.canvas,{}, {text:true,blocks:true});
    if(!stillMode||generation!==stillGeneration||stillPaused)break;
    // Preserve a pending focused tap: do not delay it for further full-frame passes.
-   const found=rebuildRows(extract(result.data)).map(it=>({...it,box:{x0:it.box.x0/variant.factor,y0:it.box.y0/variant.factor,x1:it.box.x1/variant.factor,y1:it.box.y1/variant.factor}}));
-   const changed=stillMerge(stillItems,found,'still-frame');
+   const found=rebuildRows(extract(result.data,variant.canvas)).map(it=>({...it,box:{x0:it.box.x0*source.width/variant.canvas.width,y0:it.box.y0*source.height/variant.canvas.height,x1:it.box.x1*source.width/variant.canvas.width,y1:it.box.y1*source.height/variant.canvas.height}}));
+   const changed=stillMerge(stillItems,found,'still-'+generation);
    stillStale=changed?0:stillStale+1;
    if(!sharedLabelColor&&stillItems.length)captureSharedLabelColor(source,stillItems);
+   rememberRecognition(source,stillItems,'still-frame');
    paint(stillItems);
   }
   if(stillMode&&generation===stillGeneration){
-   if(!focusedScanFailure)stillStatus(stillPaused?'Analysis paused':stillStale>=6?'Automatic analysis finished (no new candidates)':'Automatic analysis finished');
+   stillStatus(stillPaused?'Analysis paused':focusedScanFailure?'No reliable kana detected in selection · Try a wider selection':stillStale>=6?'Automatic analysis finished (no new candidates)':'Automatic analysis finished');
   }
  }catch(e){if(stillMode&&generation===stillGeneration){stillError=true;stillStatus('Scan error: '+e.message)}}
  finally{
   focusedScanning=false;
-  try{if(worker)await worker.setParameters({tessedit_pageseg_mode:'11'})}catch(e){}
+  try{if(worker)await worker.setParameters({tessedit_pageseg_mode:'11'})}catch(e){console.warn('OCR reset failed:',e);if(stillMode&&generation===stillGeneration){stillError=true;stillStatus('OCR reset error: '+e.message)}}
   stillBusy=false;stillButton();
+  if(active&&!stillMode&&!busy)setTimeout(scan,0);
+  if(stillMode&&generation!==stillGeneration&&!busy&&!stillPaused)setTimeout(stillScan,0);
   if(stillMode&&generation===stillGeneration){
    setScanVisual(stillError?'error':stillPaused?'paused':focusRequest?'focused':'finished');
    if(!stillPaused&&focusRequest)setTimeout(stillScan,0);
@@ -1003,13 +1045,12 @@ function enterStill(){
  stillSource.getContext('2d').drawImage(video,0,0,stillSource.width,stillSource.height);
  stillFrame.width=stillSource.width;stillFrame.height=stillSource.height;stillFrame.getContext('2d').drawImage(stillSource,0,0);
  stillFrame.classList.add('visible');video.style.visibility='hidden';
- work.width=stillSource.width;work.height=stillSource.height;
- wc.drawImage(stillSource,0,0,work.width,work.height);
+ // Do not mutate the work canvas owned by an in-flight Live scan.
  sharedLabelColor=null;
  stillItems=transferToStill(stillSource);
  resetTracking();referenceCanvas=null;referenceItems=[];tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);
  if(stillItems.length){captureSharedLabelColor(stillSource,stillItems);paint(stillItems)}
- stillStatus('Refining recognition…');stillButton();if(!busy)setTimeout(stillScan,0);
+ stillStatus('Refining recognition…');stillButton();if(!busy&&!stillBusy)setTimeout(stillScan,0);
 }
 function exitStill(){
  if(!stillMode)return;
@@ -1019,12 +1060,12 @@ function exitStill(){
  protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];lastFrame=null;resetTracking();ctx.clearRect(0,0,overlay.width,overlay.height);
  // Resume live tracking from the still image, but only after image registration succeeds.
  if(sharedRecognition.source==='still-frame'&&sharedRecognition.items.length){referenceCanvas=sharedRecognition.canvas;referenceItems=sharedRecognition.items.map(it=>({...it,box:{...it.box}}));protectedKana=referenceItems.map(it=>({...it,box:{...it.box}}));historyLastVerified=performance.now();flowReset();}
- stillButton();if(active&&!busy&&!stillBusy)setTimeout(scan,0);
+ resumeTracking();stillButton();if(active&&!busy&&!stillBusy)setTimeout(scan,0);
 }
-async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame();const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
+async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId,evidenceGroup='live-'+(++captureSerial),requestedFocus=focusRequest;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker){if(!window.Tesseract)throw Error('OCR library could not be loaded');worker=await Tesseract.createWorker('jpn',1);await worker.setParameters({tessedit_pageseg_mode:'11'})}if(!active||myId!==runId)return;const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame(scanCapture);const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
  // Show the first usable kana without waiting for refinement.
- if(items.length&&!stillMode){
-  const initial=items.filter(it=>it.box&&kanaOnly.test(it.text)).map(it=>({...it,state:'provisional',votes:1,source:'live-first'}));
+ if(items.length&&!stillMode&&!referenceItems.length){
+  const initial=items.filter(it=>it.box&&kanaOnly.test(it.text)).map(it=>({...it,state:'provisional',votes:1,source:evidenceGroup,support:{[it.text]:{text:it.text,groups:[evidenceGroup],confidence:it.confidence??50}}}));
   if(initial.length){
    const current=trackingFrame(),motion=captureFrame&&current?blockMotion(captureFrame,current):null;
    const difference=captureFrame&&current?captureFrame.reduce((v,x,i)=>v+Math.abs(x-current[i]),0)/captureFrame.length:0;
@@ -1037,6 +1078,21 @@ async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy
    }
   }
  }
+ // A tap requests one extra high-resolution, single-line OCR pass on the selected band.
+ if(requestedFocus&&requestedFocus.run===myId){
+  const focus=focusCrop(scanCapture,requestedFocus);
+  try{
+   await worker.setParameters({tessedit_pageseg_mode:'7'});
+   const focused=await worker.recognize(focus.canvas,{}, {text:true,blocks:true});
+   if(!active||myId!==runId)return;
+   const candidates=rebuildRows(extract(focused.data,focus.canvas)).map(it=>({...it,box:{x0:focus.x0+it.box.x0/focus.scaleX,y0:focus.y0+it.box.y0/focus.scaleY,x1:focus.x0+it.box.x1/focus.scaleX,y1:focus.y0+it.box.y1/focus.scaleY}}));
+   const chosen=candidates.filter(it=>{const cy=(it.box.y0+it.box.y1)/2;return Math.abs(cy-requestedFocus.y*scanCapture.height)<focus.region.y1-focus.region.y0&&it.confidence>=35});
+   if(chosen.length)mergeFocused(items,chosen.map(it=>({...it,pass:0})),requestedFocus,evidenceGroup);
+  }catch(e){console.warn('Focused OCR:',e)}
+  finally{await worker.setParameters({tessedit_pageseg_mode:'11'});if(focusRequest?.id===requestedFocus.id){clearFocus();$('status').textContent='Focused scan complete'}}
+ }
+
+ if(!requestedFocus){
  // Trial: re-recognize up to two larger lines without changing the baseline OCR result unless better.
  if(active&&myId===runId)items=await retryLargeLines(result.data,items);
  if(!active||myId!==runId)return;
@@ -1089,37 +1145,16 @@ async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy
   const angle=[-25,25,-45,45][scanNumber++%4],meta=rotateImage(angle);
   const originalWidth=work.width,originalHeight=work.height;
   try{
-   work.width=rotated.width;work.height=rotated.height;
    const secondary=await worker.recognize(rotated,{}, {text:true,blocks:true});
-   const extra=rebuildRows(extract(secondary.data)).map(it=>({...it,box:unrotateBox(it.box,meta)}))
+   if(!active||myId!==runId)return;
+   const extra=rebuildRows(extract(secondary.data,rotated)).map(it=>({...it,box:unrotateBox(it.box,meta)}))
     .filter(it=>it.box.x0>=0&&it.box.y0>=0&&it.box.x1<=originalWidth&&it.box.y1<=originalHeight);
    if(scoreItems(extra)>scoreItems(items))items=extra;
-  }finally{work.width=originalWidth;work.height=originalHeight;wc.drawImage(video,0,0,work.width,work.height)}
+  }finally{/* The immutable capture remains the source for every retry. */}
  }
  if(!active||myId!==runId)return;
  items=await selectiveKleeRetry(items,myId);
- // A tap requests one extra high-resolution, single-line OCR pass on the selected band.
- const requestedFocus=focusRequest;
- if(requestedFocus&&requestedFocus.run===myId){
-  const focus=focusCrop(scanCapture,requestedFocus);
-  try{
-   await worker.setParameters({tessedit_pageseg_mode:'7'});
-   const focused=await worker.recognize(focus.canvas,{}, {text:true,blocks:true});
-   if(!active||myId!==runId)return;
-   const candidates=rebuildRows(extract(focused.data)).map(it=>({...it,box:{x0:focus.x0+it.box.x0/focus.scale,y0:focus.y0+it.box.y0/focus.scale,x1:focus.x0+it.box.x1/focus.scale,y1:focus.y0+it.box.y1/focus.scale}}));
-   const chosen=candidates.filter(it=>{const cy=(it.box.y0+it.box.y1)/2;return Math.abs(cy-requestedFocus.y*scanCapture.height)<focus.region.y1-focus.region.y0&&it.confidence>=35});
-   if(chosen.length){
-    // Prefer a fuller, higher-confidence line; keep unrelated regions unchanged.
-    for(const candidate of chosen){
-     const conflicts=items.filter(it=>sameKanaRegion(it,candidate));
-     const score=it=>[...it.text].length*Math.max(0,it.confidence??50)/100;
-     if(!conflicts.length||score(candidate)>Math.max(...conflicts.map(score))*1.12){
-      items=items.filter(it=>!sameKanaRegion(it,candidate));items.push(candidate);
-     }
-    }
-   }
-  }catch(e){console.warn('Focused OCR:',e)}
-  finally{try{await worker.setParameters({tessedit_pageseg_mode:'11'})}catch(e){}if(focusRequest?.id===requestedFocus.id){clearFocus();$('status').textContent='Focused scan complete'}}
+
  }
 
  if(active&&myId===runId){const ruby=await detectRubyKanji(result.data,myId);items=items.concat(ruby)}
@@ -1130,23 +1165,12 @@ async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy
  let oldProjected=[];
  const historyFresh=performance.now()-historyLastVerified<HISTORY_TTL_MS;
  if(canPlace&&referenceCanvas&&protectedKana.length&&historyFresh){
-  try{
-   const transform=flowLocate();
-   if(transform){
-    // flowWarpBox yields CURRENT video coordinates, not scan-capture coordinates.
-    // Undo capture-to-current motion before merging or publishing a new reference.
-    oldProjected=protectedKana.map(it=>{
-     const liveBox=flowWarpBox(it.box,transform);
-     const back=elapsedMotion?inverseMotion(elapsedMotion):null;
-     return liveBox&&(!elapsedMotion||back)?{...it,box:back?moveBox(liveBox,back):liveBox}:null;
-    }).filter(Boolean);
-   }
-  }catch(e){console.warn('Protected text reprojection unavailable:',e)}
+  oldProjected=projectRecognition({canvas:referenceCanvas,items:protectedKana},scanCapture);
  }
  // Preserve the last verified reference on transient OCR or tracking failure.
  // Never attach history to a different page without a verified image transform.
- if(items.length&&canPlace){
-  const captureItems=protectRecognized(items,oldProjected);
+ if((items.length||oldProjected.length)&&canPlace){
+  const captureItems=protectRecognized(items,oldProjected,evidenceGroup);
   captureSharedLabelColor(scanCapture,items);
   referenceCanvas=scanCapture;
   referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
@@ -1160,7 +1184,7 @@ async function scan(){if(!active||stillMode||busy||!video.videoWidth)return;busy
   lastFrame=frameSignature;
   if(!historyFresh){protectedKana=[];kanaHistory=[]}
  }
- if(myId!==runId)return;progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,200)}}}}
+ if(myId!==runId)return;progressStep('');$('recognized').textContent='OCR text:\n'+(result.data.text||'(none)')+'\n\nKana:\n'+(items.map(x=>x.text+' → '+contextualRomaji(x.text)).join('\n')||'(none)')+'\n\n'+diagnoseKanaExtraction(result.data,items);$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,focusRequest?0:200)}}}}
 $('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();hasShownLabels=false;sharedLabelColor=null;protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
 $('stop').onclick=()=>{if(stillMode)exitStill();resetZoom();active=false;runId++;manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
