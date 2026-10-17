@@ -3,25 +3,27 @@ const {chromium,webkit}=await import(process.env.PLAYWRIGHT_MODULE||'playwright'
 const root=resolve('dist'),fixtures=resolve('tests/fixtures');
 const server=createServer(async(req,res)=>{try{let p=decodeURIComponent(new URL(req.url,'http://localhost').pathname);const file=p.startsWith('/test-fixtures/')?resolve(fixtures,p.slice(15)):resolve(root,'.'+(p==='/'?'/index.html':p));if(!(file.startsWith(root+'/')||file.startsWith(fixtures+'/')))throw Error('path');const bytes=await readFile(file);res.writeHead(200,{'content-type':({'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.json':'application/json','.wasm':'application/wasm','.png':'image/png'})[extname(file)]||'application/octet-stream'}).end(bytes)}catch(e){res.writeHead(404).end('Not found')}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
-const engineName=process.env.BROWSER||'chromium';const browser=await (engineName==='webkit'?webkit:chromium).launch(engineName==='webkit'?{executablePath:process.env.WEBKIT_PATH,headless:true}:{executablePath:process.env.CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],headless:true});
+const engineName=process.env.BROWSER||'chromium';const proxyUrl=process.env.TEST_URL&&process.env.HTTPS_PROXY?new URL(process.env.HTTPS_PROXY):null;const proxy=proxyUrl?{server:proxyUrl.origin,username:decodeURIComponent(proxyUrl.username),password:decodeURIComponent(proxyUrl.password)}:undefined;
+const browser=await (engineName==='webkit'?webkit:chromium).launch(engineName==='webkit'?{executablePath:process.env.WEBKIT_PATH,headless:true}:{proxy,executablePath:process.env.CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'],headless:true});
 const results=[];
 try{
  for(const device of (engineName==='webkit'?['iphone-layout']:['android-layout','iphone-layout'])){
-  const context=await browser.newContext({viewport:device==='iphone-layout'?{width:390,height:844}:{width:412,height:915},isMobile:true,hasTouch:true});
+  const context=await browser.newContext({viewport:device==='iphone-layout'?{width:390,height:844}:{width:412,height:915},isMobile:true,hasTouch:true,ignoreHTTPSErrors:!!process.env.TEST_URL});
   const page=await context.newPage(),errors=[],network=[],uploads=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   page.on('request',r=>{network.push(r.url());if(r.method()!=='GET')uploads.push(r.url());});
-  await page.addInitScript(()=>{
+  const fixtureData=Object.fromEntries(await Promise.all(['white','black'].map(async name=>[name,'data:image/png;base64,'+(await readFile(resolve(fixtures,name+'.png'))).toString('base64')])));
+  await page.addInitScript(({fixtureData})=>{
    const fills=[];window.drawnRomaji=fills;const original=CanvasRenderingContext2D.prototype.fillText;
    CanvasRenderingContext2D.prototype.fillText=function(t,...args){if(this.canvas.id==='overlay'){fills.push(t);if(fills.length>1000)fills.shift();}return original.call(this,t,...args);};
    const videoCanvas=document.createElement('canvas');videoCanvas.width=960;videoCanvas.height=540;
    let scene=null,angle=0,dx=0;
-   window.testScene=async(name,motion={})=>{const im=new Image();im.src='/test-fixtures/'+name+'.png';await im.decode();scene=im;angle=motion.angle||0;dx=motion.dx||0;draw();};
+   window.testScene=async(name,motion={})=>{const im=new Image();im.src=fixtureData[name];await im.decode();scene=im;angle=motion.angle||0;dx=motion.dx||0;draw();};
    function draw(){if(!scene)return;const q=videoCanvas.getContext('2d');q.fillStyle='#eeeeee';q.fillRect(0,0,960,540);q.save();q.translate(480+dx,270);q.rotate(angle*Math.PI/180);q.drawImage(scene,-480,-270);q.restore();}
    setInterval(draw,50);
    Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{if(!scene)await window.testScene('white');return videoCanvas.captureStream(20);}});
-  });
-  await page.goto(origin,{waitUntil:'domcontentloaded'});await page.click('#start');
+  },{fixtureData});
+  await page.goto(process.env.TEST_URL||origin,{waitUntil:'domcontentloaded'});await page.click('#start');
   try{await page.waitForFunction(()=>Number.isFinite(window.meikiMetrics?.firstLabelMs),null,{timeout:60000});}catch(e){console.error('STARTUP DIAGNOSTICS',JSON.stringify(await page.evaluate(()=>({status:document.getElementById('status').textContent,metrics:window.meikiMetrics,state:window.meikiCamera?.getState(),video:{ready:document.getElementById('video').readyState,width:document.getElementById('video').videoWidth}}))),errors);throw e;}
   await page.waitForFunction(()=>window.meikiMetrics.scans.length>=4,null,{timeout:120000});
   let state=await page.evaluate(()=>({metrics:meikiMetrics,labels:drawnRomaji,state:meikiCamera.getState(),coi:crossOriginIsolated}));
@@ -41,5 +43,5 @@ try{
   results.push({device,engine:engineName+' '+browser.version(),realPhone:false,initialMs:state.metrics.firstLabelMs,readyMs:state.metrics.readyMs,continuousMs:state.metrics.scans.slice(1).map(s=>s.ms),whiteText:state.metrics.scans[0].text,blackText:black.metrics.scans.at(-1).text,errors,uploads:uploads.length,requests:network.length,objectEpochAfterBlack:epoch});
   await context.close();console.log('PASS',device);
  }
- await writeFile('tests/'+engineName+'-browser-results.json',JSON.stringify(results,null,2));
+ await writeFile('tests/'+(process.env.TEST_URL?'published-':'')+engineName+'-browser-results.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.close();}

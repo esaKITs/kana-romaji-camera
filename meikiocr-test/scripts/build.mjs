@@ -49,12 +49,9 @@ await writeFile('index.html',html);
 await mkdir('.testing',{recursive:true});await writeFile('.testing/camera.html',html.replace('<script type="module" src="/src/main.js"></script>','<script>'+code+'</script>'));
 await build();
 const lock=JSON.parse(await readFile('models.lock.json','utf8'));const dir=process.env.MODEL_DIR||'models';
-if(!process.env.MODEL_DIR){
- const r=spawnSync(process.execPath,['vendor/meikiocr-web/tools/fetch-models.mjs','--out',dir],{stdio:'inherit'});if(r.status!==0)throw Error('Model fetch failed');
-}
 const out='dist/ocr-assets';await mkdir(out,{recursive:true});const models=[];
 for(const model of lock.models.filter(m=>m.role!=='recognizer-vertical')){
- const bytes=await readFile(dir+'/'+model.file);
+ let bytes;try{bytes=await readFile(dir+'/'+model.file)}catch(e){if(e.code!=='ENOENT')throw e;const response=await fetch(model.url);if(!response.ok)throw Error('Model HTTP '+response.status);bytes=Buffer.from(await response.arrayBuffer());await mkdir(dir,{recursive:true});await writeFile(dir+'/'+model.file,bytes);}
  if(bytes.length!==model.byteLength||createHash('sha256').update(bytes).digest('hex')!==model.sha256)throw Error('Model integrity '+model.file);
  await writeFile(out+'/'+model.file,bytes);models.push({role:model.role,path:model.file,sha256:model.sha256,byteLength:model.byteLength});
 }
@@ -68,5 +65,14 @@ console.log('Verified assets:',JSON.stringify([...models,...runtime].map(m=>({pa
 
 // GPL corresponding source is served beside the built app, not a private link.
 await mkdir('dist/source',{recursive:true});
-const archived=spawnSync('tar',['--exclude=node_modules','--exclude=dist','--exclude=.testing','--exclude=public/vendor','--exclude=public/source','--exclude=.git','-czf','dist/source/app-source.tar.gz','.'],{stdio:'inherit'});
+const archived=spawnSync('tar',['--exclude=node_modules','--exclude=models','--exclude=dist','--exclude=.testing','--exclude=public/vendor','--exclude=public/source','--exclude=.git','-czf','dist/source/app-source.tar.gz','.'],{stdio:'inherit'});
 if(archived.status!==0)throw Error('Corresponding source archive failed');
+
+// Cloudflare static assets have a 25 MiB per-file limit. Catch this before upload.
+for(const entry of await (await import('node:fs/promises')).readdir('dist',{recursive:true,withFileTypes:true})){
+ if(!entry.isFile())continue;const file=entry.parentPath+'/'+entry.name,size=(await stat(file)).size;
+ if(size>25*1024*1024)throw Error('Static host per-file limit exceeded: '+file+' '+size);
+}
+const sourceEntries=spawnSync('tar',['-tzf','dist/source/app-source.tar.gz'],{encoding:'utf8'});
+if(sourceEntries.status!==0||sourceEntries.stdout.split('\n').some(p=>p.endsWith('.onnx')))throw Error('Source archive must exclude separately distributed binary models');
+console.log('Static host limits and corresponding source archive verified.');

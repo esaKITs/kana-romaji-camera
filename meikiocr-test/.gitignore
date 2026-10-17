@@ -1,6 +1,6 @@
-node_modules/
+node_modules
 dist/
-models/
+models
 src/camera.generated.js
 .testing/
 tests/*-layout.png
