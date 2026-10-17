@@ -721,7 +721,7 @@ async function retryIndependentLargeKana(items,myId){
  return items.concat(fresh);
 }
 // Progressive OCR stabilization. Stored boxes are always in the latest verified scan frame.
-let protectedKana=[];kanaHistory=[];
+let protectedKana=[];
 function kanaThreshold(it){
  const n=[...it.text].length,c=it.confidence??0;
  return n>=10&&c>=85?1:n>=6&&c>=80?2:n>=3&&c>=85?2:n<=2&&c>=90?3:Infinity;
