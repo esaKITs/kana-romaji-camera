@@ -1,0 +1,16 @@
+{
+  "name": "Kana → Romaji Camera",
+  "short_name": "Kana Romaji",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#101820",
+  "theme_color": "#C45A35",
+  "icons": [
+    {
+      "src": "./apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

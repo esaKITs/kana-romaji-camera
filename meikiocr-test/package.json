@@ -2,11 +2,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build"
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs tests/controller/*.test.cjs"
   },
   "dependencies": {
-    "meikiocr-web": "github:bee-san/meikiocr-web",
-    "vite": "^7.1.0",
-    "wanakana": "^5.3.1"
+    "meikiocr-web": "github:bee-san/meikiocr-web#0431493cfc59534bdf9e48be95a9e43c21a206be",
+    "vite": "7.3.7"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.100",
+    "playwright": "^1.62.1"
   }
 }

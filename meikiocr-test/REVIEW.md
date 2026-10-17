@@ -1,0 +1,26 @@
+# MeikiOCR experiment implementation and verification
+
+Date: 2026-10-18 JST. Development head inspected: `7204ac4be05ebf70dafc67ac19f7747a7b3ba80e`. Production at start: `136b066505b23367f9976ff49bfe0954368ef61d`. Production files and main are not modified by this work.
+
+The previous Actions build failed with Vite's `Invalid value "iife" for option "worker.format"`. ES-module Worker output fixes this. The previous branch supplied only a separate text list. This implementation uses the existing camera/controller, rendering, tracking, gestures, Focused scan, Live/Still and unified per-object paper palette. The current production-derived controller also had a missing separator in `await ensureLiveWorker()if`; the experiment fixes that syntax in its derived copy only.
+
+The actual engine is MeikiOCR Web (`0431493cfc59534bdf9e48be95a9e43c21a206be`) + ONNX Runtime Web 1.30.0. A separate module Worker runs WASM with one thread and no proxy worker. GPU/SAB/COOP/COEP are not required. Detector/horizontal recognizer model binaries are separately served, pinned by revision, byte count and SHA-256. The vertical model is not loaded. Models total 33,097,079 bytes; WASM+glue 14,264,278 bytes. Pinned OpenCV (~11MB) and the two existing matching libraries are also served locally. There is no Tesseract runtime or traineddata request in the browser integration test.
+
+The adapter retains Meiki's real per-character boxes, groups contiguous kana without bridging kanji or punctuation, and passes those results into the original extraction/romaji pipeline. The original contextual kana conversion and small dictionary remain. No inferred kanji reading is introduced. A matching furigana result is still required to cover kanji. The old Tesseract-specific serial Live retries are bypassed only for the new provider, allowing each completed scan to be placed immediately. The existing immutable-capture/generation checks remain.
+
+A real browser test exposed another object-change path: optical flow can return early without a matrix, leaving registration status unavailable, so the old palette is not invalidated on a clearly different target. The experiment checks strong appearance change before those early returns. The test then confirms a new object epoch and absence of old labels on the new dark target.
+
+Validation:
+- Build: success; matching local WASM/model paths and checksums exported.
+- 100 unit/controller tests passed, zero skipped/cancelled/todo. Three stale original assertions were explicitly migrated: the current app's unified palette replaces independent panel colors/recoloring; the interface assertion compares exact CSS and camera controls while allowing changed OCR scripts/credits. The unmodified original assertions first produced 86 pass/3 fail, and were not reported as passing.
+- Linux Chromium 153, Android-sized and iPhone-sized viewports, **synthetic camera streams**, actual module Worker and ONNX inference: pass. Hiragana, katakana, mixed kanji/kana, four lines, white/black polarity, white→different black→white, movement/rotation, Live→Still→Live, stop, zero page errors and zero upload requests. This is not Android Chrome or iPhone Safari hardware verification.
+- Chromium final measured first-label time: 1.868s / 1.885s from Start. Model readiness 1.145s / 1.155s from page initialization. Subsequent four-line inference: 0.724–0.769s. Local HTTP asset transfer is fast; these numbers do not predict mobile Internet cold-start time.
+- Original 89-test run against the derived controller initially failed 3 contract assertions as explained above. An early real-browser run failed 3 external-CDN loads; serving those pinned scripts locally resolved them. The first object-change browser assertion required the early registration fix; the final run passes.
+
+Remaining limits:
+- Physical iPhone Safari and Android Chrome cameras, cold Internet download, mobile memory/thermal/battery behavior, long sessions and real packaging/glare are not verified.
+- Linux WebKit is being tested separately; a launch attempt initially hit missing system libraries and camera-stream GStreamer plugins. This is not evidence that iPhone Safari fails or succeeds.
+- Model recognizer capacity is 48 characters per line; warnings remain available in diagnostics. Arbitrary camera images may be misrecognized. No claim of perfect segmentation or faster performance than Tesseract on a phone is made.
+- New combined experiment distribution is GPL-3.0-only; original app code retains MIT, models LGPL-3.0, ORT MIT, OpenCV Apache-2.0, alignment helpers MIT, original UniDic notices retained. License originals, pinned model details, build scripts and corresponding application/library source archives are served alongside the experiment.
+
+Production adoption: defer until physical-device verification of startup, recognition, tracking and memory. The public experiment can be used independently without replacing the existing production app.

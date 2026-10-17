@@ -4,6 +4,8 @@ on:
   push:
     branches: [meikiocr-mobile-experiment]
     paths: ['meikiocr-test/**', '.github/workflows/meikiocr-mobile.yml']
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,17 +14,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install and build MeikiOCR
+      - name: Install pinned dependencies
         working-directory: meikiocr-test
-        run: npm install && npm run build
-      - name: Fetch verified models and export runtime assets
+        run: npm ci
+      - name: Build and verify pinned models and runtime
         working-directory: meikiocr-test
-        run: |
-          npm --prefix node_modules/meikiocr-web run fetch-models
-          npm --prefix node_modules/meikiocr-web run export-assets
-          mkdir -p dist/ocr-assets
-          cp -R node_modules/meikiocr-web/assets-export/. dist/ocr-assets/
+        run: npm run build
+      - name: Controller and adapter regression tests
+        working-directory: meikiocr-test
+        run: npm test
+      - name: Install browser test runtimes
+        working-directory: meikiocr-test
+        run: npx playwright install --with-deps chromium webkit
+      - name: Chromium actual Worker and camera-stream integration
+        working-directory: meikiocr-test
+        run: node scripts/browser-test.mjs
+      - name: WebKit actual Worker and camera-stream integration
+        working-directory: meikiocr-test
+        run: BROWSER=webkit node scripts/browser-test.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: meikiocr-mobile-test
-          path: meikiocr-test/dist
+          path: |
+            meikiocr-test/dist
+            meikiocr-test/tests/*browser-results.json
+            meikiocr-test/tests/*-live.png
