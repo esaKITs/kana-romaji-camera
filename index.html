@@ -1251,7 +1251,33 @@ function ensureLiveWorker(){
  })().catch(e=>{liveWorkerPromise=null;throw e});
  return liveWorkerPromise;
 }
-async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId,evidenceGroup='live-'+(++captureSerial),requestedFocus=focusRequest;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker)await ensureLiveWorker()if(!active||myId!==runId)return;const scale=Math.min(1,(referenceItems.length?1280:960)/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame(scanCapture);const frameSignature=imageSignature();const ocrStarted=performance.now();const result=await worker.recognize(work,{}, {text:true,blocks:true});console.info('[Live OCR recognition]',Math.round(performance.now()-ocrStarted)+'ms');if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
+async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId,evidenceGroup='live-'+(++captureSerial),requestedFocus=focusRequest;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker)await ensureLiveWorker()if(!active||myId!==runId)return;const scale=Math.min(1,(referenceItems.length?1280:960)/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame(scanCapture);const frameSignature=imageSignature();const ocrStarted=performance.now();// Fast first-label trial: recognize the center crop first. Keep the full-frame
+// OCR afterwards for completeness; do not block on registration to show nothing.
+if(!referenceItems.length&&!stillMode){
+ const crop=document.createElement('canvas');
+ const x0=Math.round(work.width*.20),y0=Math.round(work.height*.20);
+ crop.width=Math.max(1,Math.round(work.width*.60));
+ crop.height=Math.max(1,Math.round(work.height*.60));
+ crop.getContext('2d').drawImage(work,x0,y0,crop.width,crop.height,0,0,crop.width,crop.height);
+ const fastStarted=performance.now();
+ try{
+  const quick=await worker.recognize(crop,{}, {text:true,blocks:true});
+  if(active&&myId===runId&&!stillMode&&!referenceItems.length){
+   const candidates=rebuildRows(extract(quick.data)).filter(it=>it.box&&kanaOnly.test(it.text));
+   const initial=candidates.map(it=>({...it,box:{x0:it.box.x0+x0,y0:it.box.y0+y0,x1:it.box.x1+x0,y1:it.box.y1+y0},state:'provisional',votes:1,source:evidenceGroup,support:{[it.text]:{text:it.text,groups:[evidenceGroup],confidence:it.confidence??50}}}));
+   const registration=motionRegistration(scanCapture,cameraSnapshot(),null);
+   console.info('[Crop-first OCR]',{ms:Math.round(performance.now()-fastStarted),candidates:initial.length,registration:registration.status});
+   if(initial.length&&registration.status==='verified'){
+    referenceCanvas=scanCapture;referenceItems=initial.map(it=>({...it,box:{...it.box}}));
+    protectedKana=initial.map(it=>({...it,box:{...it.box}}));historyLastVerified=performance.now();
+    rememberRecognition(scanCapture,initial,'live-frame');flowReset();tracks=initial;
+    alignOverlay();paint(tracks);
+   }
+  }
+ }catch(e){console.warn('Crop-first trial:',e)}
+ if(!active||myId!==runId)return;
+}
+const result=await worker.recognize(work,{}, {text:true,blocks:true});console.info('[Live OCR recognition]',Math.round(performance.now()-ocrStarted)+'ms');if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
  // Show the first usable kana without waiting for refinement.
  if(items.length&&!stillMode&&!referenceItems.length){
   const initial=items.filter(it=>it.box&&kanaOnly.test(it.text)).map(it=>({...it,state:'provisional',votes:1,source:evidenceGroup,support:{[it.text]:{text:it.text,groups:[evidenceGroup],confidence:it.confidence??50}}}));
