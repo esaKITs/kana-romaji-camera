@@ -992,7 +992,7 @@ async function trackTick(){
     if(located)lastRegistrationStatus='verified';
    }
    if(located){
-    const moved=referenceItems.map(it=>({...it,box:flowWarpBox(it.box,located)})).filter(it=>it.box);
+    const moved=referenceItems.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,located),rubyBox:it.rubyBox?flowWarpBox(it.rubyBox,located):undefined})).filter(it=>it.box&&(!it.rubyKanji||it.rubyBox));
     if(moved.length){tracks=moved;paint(moved);flowFailures=0;flowLastSuccess=performance.now()}
    }else if(lastRegistrationStatus==='mismatch'){resetObjectState()}else{flowFailures++; if(flowFailures>=2){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);}}
   }catch(e){featureFailure=String(e.message||e);flowFailures++;if(flowFailures>=2){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height)}}
@@ -1366,7 +1366,7 @@ function projectRecognition(previous,target){
   const validation=verifyRegistration(previous.canvas,target,transform);lastRegistrationStatus=validation.status;
   if(validation.status!=='verified')return [];
   return previous.items.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,transform,target),rubyBox:it.rubyBox?flowWarpBox(it.rubyBox,transform,target):undefined}))
-   .filter(it=>validRecognitionItem(it,target));
+   .filter(it=>validRecognitionItem(it,target)&&(!it.rubyKanji||it.rubyBox));
  }catch(e){console.warn('Recognition registration unavailable:',e);return []}
  finally{({referenceCanvas,referenceItems,flowCache,flowVersion}=saved)}
 }
@@ -1399,7 +1399,7 @@ function evidenceMerge(old,candidate,group){
  // A tentative first reading can improve on the SAME frozen image, but
  // repeated variants must never pretend to be independent confirmations.
  const tentativeImprovement=name!==old.text&&old.state!=='confirmed'&&!old.focused&&oldEvidence===1&&record.confidence>=existing.confidence+15;
- const chosen=switchAllowed||tentativeImprovement?{...candidate}:old.text===name?{...old,box:{...candidate.box},confidence:record.confidence}:old;
+ const chosen=switchAllowed||tentativeImprovement?{...candidate}:old.text===name?{...old,box:{...candidate.box},rubyBox:candidate.rubyBox?{...candidate.rubyBox}:old.rubyBox?{...old.rubyBox}:undefined,confidence:record.confidence}:old;
  const winner=support[chosen.text],votes=winner.groups.length;
  const required=kanaThreshold({...chosen,confidence:winner.confidence});
  const bounded=Object.fromEntries(Object.entries(support).sort(([a,x],[b,y])=>(b===chosen.text)-(a===chosen.text)||y.groups.length-x.groups.length||y.confidence-x.confidence).slice(0,5));
@@ -1408,8 +1408,8 @@ function evidenceMerge(old,candidate,group){
 function stillMerge(items,newItems,group='still-frame',notify=true){
  let updates=0;
  for(const candidate of newItems){
-  if(!candidate.box||!kanaOnly.test(candidate.text)||(candidate.confidence??0)<24)continue;
-  const matches=items.filter(it=>sameKanaRegion(it,candidate));
+  if(!candidate.box||!kanaOnly.test(candidate.text)||(candidate.confidence??0)<24||(candidate.rubyKanji&&!candidate.rubyBox))continue;
+  const matches=items.filter(it=>!!it.rubyKanji===!!candidate.rubyKanji&&sameKanaRegion(it,candidate));
   if(!matches.length){
    items.push({...cloneRecognitionItem(candidate),support:{[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence??50}},source:group,state:'provisional',votes:1});updates++;continue;
   }
