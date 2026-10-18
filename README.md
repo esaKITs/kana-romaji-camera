@@ -1,8 +1,13 @@
 # Kana → Romaji Camera
 
+> **Current version (MeikiOCR):** [Open the camera](https://esakits.github.io/kana-romaji-camera/) · [Edit the current application](meikiocr-test/app.html) · [Build and deployment](meikiocr-test/README.md) · [Licenses and corresponding source](https://esakits.github.io/kana-romaji-camera/licenses/NOTICE.html).
+>
+> **Important:** The repository-root `index.html` is only a pointer to the live website; **it is not the camera's source**. The previous Tesseract implementation is preserved in [archive/legacy-tesseract-index.html](archive/legacy-tesseract-index.html). GitHub Pages deploys the built output from `meikiocr-test/` via [the Pages workflow](.github/workflows/pages.yml). Do not edit the archived file to customize the public app.
+
+
 Public application: https://esakits.github.io/kana-romaji-camera/
 
-The current application is built from `meikiocr-test/`: MeikiOCR Web + ONNX Runtime Web, with on-device Japanese OCR and the existing kana-to-romaji camera interface. No image-upload service or paid API is used. The previously deployed Tesseract root `index.html` is retained as historical source; the Pages workflow publishes the verified `meikiocr-test/dist/` output instead.
+The current application is built from `meikiocr-test/`: MeikiOCR Web + ONNX Runtime Web, with on-device Japanese OCR and the existing kana-to-romaji camera interface. No image-upload service or paid API is used. The previous Tesseract root implementation is archived at `archive/legacy-tesseract-index.html` for reference. The root `index.html` now points to the live site; the Pages workflow publishes only the verified `meikiocr-test/dist/` output.
 
 ## Build and verify
 
