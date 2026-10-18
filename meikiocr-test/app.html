@@ -78,11 +78,12 @@ body.camera-active .actions button,body.camera-active .actions .primary-actions{
 body.camera-active #stop{box-shadow:0 2px 10px #0009}
 body.camera-active #scan.scan-float{box-shadow:0 0 0 3px #C45A35,0 2px 14px #000a}
 body.camera-active.camera-still .actions{display:none}
-body.camera-still header .topbar{visibility:visible;margin-top:52px}
+/* Still has three rows: brand, close/status with adjacent retry, then options. */
+body.camera-still header .topbar{visibility:visible;margin-top:0}
 body.camera-still header .topbar #stop{display:none!important}
-body.camera-still header .camera-options{padding-top:6px}
-body.camera-still .live-return{top:calc(12px + env(safe-area-inset-top,0px))}
-body.camera-still .still-progress-group{top:calc(12px + env(safe-area-inset-top,0px))}
+body.camera-still header .camera-options{margin-top:64px;padding-top:6px}
+body.camera-still .live-return{top:calc(64px + env(safe-area-inset-top,0px))}
+body.camera-still .still-progress-group{top:calc(64px + env(safe-area-inset-top,0px))}
 
 /* Back navigation takes the place of the old bottom Stop button. */
 body.camera-active header .topbar{gap:8px}
