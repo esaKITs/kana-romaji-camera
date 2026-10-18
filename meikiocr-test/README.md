@@ -15,3 +15,7 @@ Deployment compatibility: the exact upstream client/worker and source maps are v
 Large Still/Focused variants are normalized below 4 million pixels before transfer, with separate exact x/y coordinate mapping back to the original image. Alignment scripts load asynchronously so their large OpenCV download does not gate camera controls or OCR initialization.
 
 Public experiment: https://kana-romaji-meiki-experiment.esakit.chatgpt.site/ . Detailed findings and verification limits: [REVIEW.md](REVIEW.md). Physical iPhone Safari and Android Chrome remain unverified; use the separate experiment before deciding whether to adopt it in production.
+
+## Kana display modes
+
+Camera options: Guides → あア/ア → aa/ā → Light. Default あア converts both scripts; ア shows katakana only. The mode persists locally and updates Live/Still labels without another OCR call. Mixed-script items are split only when OCR glyph positions are available. Still mode retains the title and esaKITs beneath its close/status row. Button visuals are smaller, within 44px tap targets.
