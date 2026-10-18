@@ -19,6 +19,21 @@ export function initialize(){
  })().catch(e=>{pending=null;metrics.error=e.message;status('OCR error: '+e.message);throw e});
  return pending;
 }
-window.MeikiOCR={createWorker:()=>initialize()};window.meikiMetrics=metrics;
-window.addEventListener('pagehide',()=>{pending?.then(adapter=>adapter.terminate()).catch(()=>{});});
-initialize().catch(()=>{});
+// iOS Safari may suspend this page and reclaim memory while another app is open.
+// Avoid allocating a large WASM model until the camera is actually requested.
+let pageClosed=false;
+window.MeikiOCR={createWorker:()=>{
+ if(pageClosed)return Promise.reject(Error('OCR page is closing'));
+ return initialize();
+}};
+window.meikiMetrics=metrics;
+window.addEventListener('pagehide',()=>{
+ pageClosed=true;
+ const current=pending;
+ pending=null;
+ if(current)current.then(adapter=>adapter.terminate()).catch(()=>{});
+});
+// A bfcache restoration must not reuse the disposed WASM session.
+window.addEventListener('pageshow',event=>{
+ if(event.persisted&&pageClosed)location.reload();
+});
