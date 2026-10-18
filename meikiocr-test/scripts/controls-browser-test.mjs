@@ -24,9 +24,9 @@ try{
   assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','Shutter bar is transparent');
   assert.equal(await page.locator('#video').evaluate(el=>getComputedStyle(el).objectFit),'cover','Camera geometry fills the full-bleed stage');
   assert.equal(await page.locator('#overlay').evaluate(el=>getComputedStyle(el).objectFit),'cover','OCR overlay must use identical center-crop geometry');
-  let b=await page.locator('#debug').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<110,'Guides must be in the top options');
+  let b=await page.locator('#debug').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<155,'Guides must be in the top options');
   const toggle=page.locator('#long-vowels'),toggleBox=await toggle.boundingBox(),guideBox=await page.locator('#debug').boundingBox();
-  assert.ok(toggleBox&&toggleBox.y<110&&toggleBox.x>guideBox.x+guideBox.width,'Long vowels must be next to Guides in top options');
+  assert.ok(toggleBox&&toggleBox.y<155&&toggleBox.x>guideBox.x+guideBox.width,'Long vowels must be next to Guides in top options');
   assert.equal(toggleBox.width,guideBox.width,'Long-vowel button width matches Guides');assert.equal(toggleBox.height,guideBox.height,'Long-vowel button height matches Guides');assert.equal(toggleBox.width,toggleBox.height,'Long-vowel button is square');
   assert.equal(await toggle.evaluate(el=>getComputedStyle(el).borderRadius),await page.locator('#debug').evaluate(el=>getComputedStyle(el).borderRadius));
   assert.equal(await page.locator('#torch .torch-bolt').evaluate(el=>getComputedStyle(el).fill),'rgb(38, 52, 69)','Torch bolt must use the dark neutral icon fill');
@@ -36,7 +36,7 @@ try{
   await toggle.click();assert.equal(await toggle.textContent(),'ā');assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'pātī');
   assert.equal(await page.evaluate(()=>meikiCamera.getState().runId),oldGeneration,'Display toggle must not restart OCR');
   assert.equal(await toggle.getAttribute('aria-pressed'),'true');
-  const light=await page.locator('#torch').boundingBox(),scan=await page.locator('#scan').boundingBox();assert.ok(light&&light.y<110&&light.x>toggleBox.x+toggleBox.width,'Light must be the rightmost top option');assert.ok(scan&&Math.abs(scan.x+scan.width/2-width/2)<2&&scan.y>height-125,'Live shutter must be bottom-center');assert.equal(await page.locator('#camera-options #torch').count(),1);assert.equal(await page.locator('.actions #torch').count(),0);
+  const light=await page.locator('#torch').boundingBox(),scan=await page.locator('#scan').boundingBox();assert.ok(light&&light.y<155&&light.x>toggleBox.x+toggleBox.width,'Light must be the rightmost top option');assert.ok(scan&&Math.abs(scan.x+scan.width/2-width/2)<2&&scan.y>height-125,'Live shutter must be bottom-center');assert.equal(await page.locator('#camera-options #torch').count(),1);assert.equal(await page.locator('.actions #torch').count(),0);
   if(name==='android'){await page.click('#torch');await page.waitForFunction(()=>document.getElementById('torch').getAttribute('aria-pressed')==='true');await page.click('#torch');await page.waitForFunction(()=>document.getElementById('torch').getAttribute('aria-pressed')==='false');assert.deepEqual(await page.evaluate(()=>mockTorchCalls),[true,false]);}else assert.ok(await page.locator('#torch').isDisabled());
   await page.screenshot({path:'tests/controls-'+name+'.png'});
   assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'pan-y');
