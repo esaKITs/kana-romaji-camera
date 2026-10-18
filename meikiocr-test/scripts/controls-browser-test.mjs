@@ -15,7 +15,16 @@ try{
   },{torchSupported:name==='android'});
   await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});await page.click('#start');await page.waitForFunction(()=>meikiCamera.getState().active);
   const visible=async()=>{const b=await page.locator('#stop').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<=page.viewportSize().height,'Stop must stay inside visible viewport');assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).position),'fixed');};
-  await visible();let b=await page.locator('#debug').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<110,'Guides must be in the top options');
+  await visible();
+  const rects=await page.evaluate(()=>{const rect=id=>{const r=document.querySelector(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height}};return {stage:rect('#stage'),video:rect('#video'),header:rect('header'),options:rect('#camera-options'),actions:rect('.actions'),scan:rect('#scan')}}); 
+  assert.ok(Math.abs(rects.stage.top)<2,'Camera begins at the top of the viewport');
+  assert.ok(rects.video.top<=rects.options.top&&rects.video.bottom>=rects.scan.bottom,'Camera extends behind top options and shutter');
+  assert.ok(rects.stage.bottom>=height-3,'Full-bleed camera extends near viewport bottom');
+  assert.equal(await page.locator('header').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','Header remains transparent during camera');
+  assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','Shutter bar is transparent');
+  assert.equal(await page.locator('#video').evaluate(el=>getComputedStyle(el).objectFit),'cover','Camera geometry fills the full-bleed stage');
+  assert.equal(await page.locator('#overlay').evaluate(el=>getComputedStyle(el).objectFit),'cover','OCR overlay must use identical center-crop geometry');
+  let b=await page.locator('#debug').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<110,'Guides must be in the top options');
   const toggle=page.locator('#long-vowels'),toggleBox=await toggle.boundingBox(),guideBox=await page.locator('#debug').boundingBox();
   assert.ok(toggleBox&&toggleBox.y<110&&toggleBox.x>guideBox.x+guideBox.width,'Long vowels must be next to Guides in top options');
   assert.equal(toggleBox.width,guideBox.width,'Long-vowel button width matches Guides');assert.equal(toggleBox.height,guideBox.height,'Long-vowel button height matches Guides');assert.equal(toggleBox.width,toggleBox.height,'Long-vowel button is square');
