@@ -28,6 +28,10 @@ try{
   const toggle=page.locator('#long-vowels'),toggleBox=await toggle.boundingBox(),guideBox=await page.locator('#debug').boundingBox();
   assert.ok(toggleBox&&toggleBox.y<155&&toggleBox.x>guideBox.x+guideBox.width,'Long vowels must be next to Guides in top options');
   assert.equal(toggleBox.width,guideBox.width,'Long-vowel button width matches Guides');assert.equal(toggleBox.height,guideBox.height,'Long-vowel button height matches Guides');assert.equal(toggleBox.width,toggleBox.height,'Long-vowel button is square');
+  assert.equal(await toggle.evaluate(el=>getComputedStyle(el).alignItems),'center','Long vowels vertically centered');
+  assert.equal(await toggle.evaluate(el=>getComputedStyle(el).justifyContent),'center','Long vowels horizontally centered');
+  assert.equal(await toggle.evaluate(el=>getComputedStyle(el).paddingTop),'0px','Long vowels have no asymmetric padding');
+  assert.equal(await page.locator('#torch .torch-bolt').getAttribute('d'),'M14.2 2.2 7.1 13h5.25L9.8 21.8 17.5 10.6h-5.2Z','Flash uses the refined narrow bolt');
   assert.equal(await toggle.evaluate(el=>getComputedStyle(el).borderRadius),await page.locator('#debug').evaluate(el=>getComputedStyle(el).borderRadius));
   assert.equal(await page.locator('#torch .torch-bolt').evaluate(el=>getComputedStyle(el).fill),'rgb(38, 52, 69)','Torch bolt must use the dark neutral icon fill');
   assert.equal(await page.locator('#torch .torch-off').getAttribute('d'),'M4.5 4.5L19.5 19.5','Torch-off slash goes from top-left to bottom-right');
