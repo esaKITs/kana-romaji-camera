@@ -18,6 +18,10 @@ try{
   await visible();let b=await page.locator('#debug').boundingBox();assert.ok(Math.abs(b.x+b.width/2-width/2)<2,'Guides must be centered');
   const toggle=page.locator('#long-vowels'),toggleBox=await toggle.boundingBox(),guideBox=await page.locator('#debug').boundingBox();
   assert.ok(toggleBox&&toggleBox.y+toggleBox.height<=height&&toggleBox.x>guideBox.x+guideBox.width,'Long vowels must remain reachable to the right of centered guides');
+  assert.equal(toggleBox.width,guideBox.width,'Long-vowel button width matches Guides');assert.equal(toggleBox.height,guideBox.height,'Long-vowel button height matches Guides');assert.equal(toggleBox.width,toggleBox.height,'Long-vowel button is square');
+  assert.equal(await toggle.evaluate(el=>getComputedStyle(el).borderRadius),await page.locator('#debug').evaluate(el=>getComputedStyle(el).borderRadius));
+  assert.equal(await page.locator('#torch .torch-bolt').evaluate(el=>getComputedStyle(el).fill),'rgb(0, 0, 0)','Torch bolt must have a solid black fill');
+  assert.equal(await page.locator('#torch .torch-off').getAttribute('d'),'M3 3L21 21','Torch-off slash goes from top-left to bottom-right');
   assert.equal(await toggle.textContent(),'aa');assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'paatii');
   const oldGeneration=await page.evaluate(()=>meikiCamera.getState().runId);
   await toggle.click();assert.equal(await toggle.textContent(),'ā');assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'pātī');

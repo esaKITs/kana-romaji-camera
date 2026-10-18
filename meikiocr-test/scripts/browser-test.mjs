@@ -17,9 +17,10 @@ try{
    const fills=[];window.drawnRomaji=fills;const original=CanvasRenderingContext2D.prototype.fillText;
    CanvasRenderingContext2D.prototype.fillText=function(t,...args){if(this.canvas.id==='overlay'){fills.push(t);if(fills.length>1000)fills.shift();}return original.call(this,t,...args);};
    const videoCanvas=document.createElement('canvas');videoCanvas.width=960;videoCanvas.height=540;
-   let scene=null,angle=0,dx=0;
+   let scene=null,angle=0,dx=0,exposure=1;
+   window.testExposure=value=>{exposure=value;draw()};
    window.testScene=async(name,motion={})=>{const im=new Image();im.src=fixtureData[name];await im.decode();scene=im;angle=motion.angle||0;dx=motion.dx||0;draw();};
-   function draw(){if(!scene)return;const q=videoCanvas.getContext('2d');q.fillStyle='#eeeeee';q.fillRect(0,0,960,540);q.save();q.translate(480+dx,270);q.rotate(angle*Math.PI/180);q.drawImage(scene,-480,-270);q.restore();}
+   function draw(){if(!scene)return;const q=videoCanvas.getContext('2d');q.fillStyle='#eeeeee';q.fillRect(0,0,960,540);q.save();q.translate(480+dx,270);q.rotate(angle*Math.PI/180);q.drawImage(scene,-480,-270);q.restore();if(exposure!==1){q.save();q.globalAlpha=1-exposure;q.fillStyle="#000";q.fillRect(0,0,960,540);q.restore();}}
    setInterval(draw,50);
    Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{if(!scene)await window.testScene('white');return videoCanvas.captureStream(20);}});
   },{fixtureData});
@@ -34,11 +35,22 @@ try{
   await page.waitForFunction(()=>drawnRomaji.includes('jasumintī'),null,{timeout:10000});
   await page.evaluate(()=>drawnRomaji.length=0);await page.click('#long-vowels');
   await page.waitForFunction(()=>drawnRomaji.includes('jasumintii'),null,{timeout:10000});
-  const firstCount=state.metrics.scans.length;
+  const exposureCheck=await page.evaluate(async()=>{
+   const epoch=meikiCamera.getState().objectEpoch,samples=[];
+   for(const value of [.5,1,.6,1]){
+    testExposure(value);
+    for(let i=0;i<5;i++){await new Promise(resolve=>setTimeout(resolve,65));const s=meikiCamera.getState();samples.push({value,labels:s.tracks.length,epoch:s.objectEpoch,registration:meikiMetrics.lastRegistration})}
+   }
+   return {epoch,samples};
+  });
+  assert.ok(exposureCheck.samples.every(s=>s.labels>0&&s.epoch===exposureCheck.epoch),'Lighting-only camera changes must retain positioned labels and object epoch: '+JSON.stringify(exposureCheck));
+  const firstCount=await page.evaluate(()=>meikiMetrics.scans.length);
   await page.evaluate(()=>testScene('black'));await page.waitForFunction(n=>meikiMetrics.scans.length>n+1,firstCount,{timeout:120000});
+  await page.waitForFunction(epoch=>{const s=meikiCamera.getState();return s.objectEpoch>epoch&&s.tracks.some(t=>t.text.includes('あけないで'))},state.state.objectEpoch,{timeout:15000});
   let black=await page.evaluate(()=>({metrics:meikiMetrics,state:meikiCamera.getState(),labels:drawnRomaji}));assert.ok(black.metrics.scans.slice(firstCount).some(s=>s.text.includes('あけないで')),'white on black OCR');assert.ok(black.state.objectEpoch>state.state.objectEpoch,'A new object resets history and palette even if optical flow fails');assert.ok(!black.state.tracks.some(t=>t.text.includes('しないで')),'old object label not restored');
   const epoch=black.state.objectEpoch;
   await page.evaluate(()=>testScene('white',{dx:12,angle:3}));await page.waitForFunction(n=>meikiMetrics.scans.length>n+1,black.metrics.scans.length,{timeout:120000});
+  await page.waitForFunction(epoch=>{const s=meikiCamera.getState();return s.objectEpoch>epoch&&s.tracks.some(t=>t.text.includes('しないで'))},black.state.objectEpoch,{timeout:15000}).catch(async error=>{console.error('MOVED TARGET DIAGNOSTICS',JSON.stringify(await page.evaluate(()=>({state:meikiCamera.getState(),registration:meikiMetrics.lastRegistration,capture:meikiMetrics.lastCapturePlacement,scans:meikiMetrics.scans.slice(-3)}))));throw error});
   const moved=await page.evaluate(()=>meikiCamera.getState());assert.ok(moved.tracks.length>0,'Moved/rotated target still has positioned labels');
   await page.click('#scan');await page.waitForFunction(()=>meikiCamera.getState().stillMode&&meikiCamera.getState().stillItems.length>0,null,{timeout:120000});
   await page.click('#pause-scan');await page.click('#live-return');await page.waitForFunction(()=>!meikiCamera.getState().stillMode,null,{timeout:10000});
@@ -51,7 +63,7 @@ try{
   }
   assert.equal(uploads.length,0,'No image/text POST requests');assert.equal(errors.length,0,errors.join('\n'));assert.ok(!network.some(u=>/tesseract|traineddata|jsep/.test(u)),'No Tesseract or GPU downloads');
   await page.screenshot({path:'tests/'+device+'.png',fullPage:true});
-  results.push({device,engine:engineName+' '+browser.version(),realPhone:false,initialMs:state.metrics.firstLabelMs,warmInitialMs,readyMs:state.metrics.readyMs,continuousMs:state.metrics.scans.slice(1).map(s=>s.ms),whiteText:state.metrics.scans[0].text,blackText:black.metrics.scans.at(-1).text,errors,uploads:uploads.length,requests:network.length,objectEpochAfterBlack:epoch,servedAssets});
+  results.push({device,engine:engineName+' '+browser.version(),realPhone:false,initialMs:state.metrics.firstLabelMs,warmInitialMs,readyMs:state.metrics.readyMs,continuousMs:state.metrics.scans.slice(1).map(s=>s.ms),whiteText:state.metrics.scans[0].text,blackText:black.metrics.scans.at(-1).text,errors,uploads:uploads.length,requests:network.length,objectEpochAfterBlack:epoch,lightingSimulationSamples:exposureCheck.samples.length,lightingLabelsAlwaysVisible:exposureCheck.samples.every(s=>s.labels>0&&s.epoch===exposureCheck.epoch),servedAssets});
   await context.close();console.log('PASS',device);
  }
  await writeFile('tests/'+(process.env.TEST_URL?'published-':'')+engineName+'-browser-results.json',JSON.stringify(results,null,2));

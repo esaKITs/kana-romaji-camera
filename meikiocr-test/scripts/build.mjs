@@ -26,14 +26,6 @@ let code=match[1].replace('/* ROMANIZATION_CONTROLLER */','const pronunciationLe
 // experiment only; never edit the repository root's published application.
 code=code.replace('await ensureLiveWorker()if','await ensureLiveWorker();if');
 code=code.replace('if(!requestedFocus){','if(!requestedFocus&&!worker.meiki){');
-// Optical flow can fail before producing a matrix on a new object. Check a
-// large appearance change BEFORE those early returns, so history/palette reset.
-code=code.replace("lastRegistrationStatus='unavailable';\n\n if(!flowPrepare())",`lastRegistrationStatus='unavailable';
- if(referenceCanvas){
-  const appearance=verifyRegistration(referenceCanvas,target,{m:[1,0,0,0,1,0,0,0,1],W:referenceCanvas.width,H:referenceCanvas.height});
-  if(appearance.status==='mismatch'&&appearance.reason==='appearance-change'){lastRegistrationStatus='mismatch';return null;}
- }
- if(!flowPrepare())`);
 code=code.replace('const ocrWarmup=ensureLiveWorker();','window.meikiMetrics&&(window.meikiMetrics.startClickMs=performance.now());const ocrWarmup=ensureLiveWorker();ocrWarmup.catch(()=>{});');
 code=code.replace('function paint(items){','function paint(items){');
 code=code.replace('accepted.push({...c,x,y,rect});','accepted.push({...c,x,y,rect});if(window.meikiMetrics&&window.meikiMetrics.firstLabelMs===null&&window.meikiMetrics.startClickMs!==null)window.meikiMetrics.firstLabelMs=performance.now()-window.meikiMetrics.startClickMs;');
