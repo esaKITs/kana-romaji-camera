@@ -430,7 +430,7 @@ async function detectRubyKanji(data,myId){
    if(kana.test(candidate)&&candidate===nearby[0].text)reading=candidate;
   }catch(e){console.warn('Ruby OCR retry:',e)}
   finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
-  if(reading&&active&&myId===runId)found.push({text:reading,box:{...b},confidence:nearby[0].confidence||50,rubyKanji:true});
+  if(reading&&active&&myId===runId)found.push({text:reading,box:{...b},rubyBox:{...q},confidence:nearby[0].confidence||50,rubyKanji:true});
  }
  return found;
 }
@@ -640,6 +640,20 @@ function stabilizeLiveDisplay(items,image){
  liveDisplayState={epoch:objectEpoch,aspect,at:now,entries};return result;
 }
 
+// Keep one label per verified ruby/kanji pair. Ruby glyphs supply the reading,
+// while the kanji box is the sole output position.
+function suppressRubyDuplicates(items){
+ const rubies=items.filter(it=>it.rubyKanji&&it.rubyBox&&it.box);
+ if(!rubies.length)return items;
+ const intersection=(a,b)=>Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0))*Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0));
+ const area=b=>Math.max(1,(b.x1-b.x0)*(b.y1-b.y0));
+ return items.filter(it=>{
+  if(it.rubyKanji)return true;
+  const box=it.box;
+  if(!box)return true;
+  return !rubies.some(r=>it.text===r.text&&intersection(box,r.rubyBox)/area(box)>=.7);
+ });
+}
 // Filter display labels using actual OCR glyph geometry, not inferred character widths.
 function katakanaDisplayItems(items){
  const result=[];
@@ -667,7 +681,7 @@ function katakanaDisplayItems(items){
 function paint(items){
  if(items.length){hasShownLabels=true;if(!stillMode)progress.hidden=true}
  const image=stillMode&&stillSource?stillSource:work;
- items=stabilizeLiveDisplay(lineAligned(items),image);
+ items=suppressRubyDuplicates(stabilizeLiveDisplay(lineAligned(items),image));
   if(kanaMode==='katakana')items=katakanaDisplayItems(items);
  overlay.width=image.width;overlay.height=image.height;
  ctx.clearRect(0,0,overlay.width,overlay.height);
@@ -1317,7 +1331,7 @@ function imageMatches(a,b){
  return diff/a.length<14;
 }
 function cloneRecognitionItem(it){
- return {...it,box:{...it.box},observedGroups:it.observedGroups?[...it.observedGroups]:undefined,support:it.support?Object.fromEntries(Object.entries(it.support).map(([key,v])=>[key,{...v,groups:[...v.groups]}])):undefined};
+ return {...it,box:{...it.box},rubyBox:it.rubyBox?{...it.rubyBox}:undefined,observedGroups:it.observedGroups?[...it.observedGroups]:undefined,support:it.support?Object.fromEntries(Object.entries(it.support).map(([key,v])=>[key,{...v,groups:[...v.groups]}])):undefined};
 }
 function validRecognitionItem(it,image){
  const b=it.box;
@@ -1351,7 +1365,7 @@ function projectRecognition(previous,target){
   if(!transform)return [];
   const validation=verifyRegistration(previous.canvas,target,transform);lastRegistrationStatus=validation.status;
   if(validation.status!=='verified')return [];
-  return previous.items.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,transform,target)}))
+  return previous.items.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,transform,target),rubyBox:it.rubyBox?flowWarpBox(it.rubyBox,transform,target):undefined}))
    .filter(it=>validRecognitionItem(it,target));
  }catch(e){console.warn('Recognition registration unavailable:',e);return []}
  finally{({referenceCanvas,referenceItems,flowCache,flowVersion}=saved)}
@@ -1694,9 +1708,9 @@ async function scan(){if(document.hidden||!active||stillMode||busy||stillBusy||!
 
  }
 
- if(active&&myId===runId){const ruby=await detectRubyKanji(result.data,myId);items=items.concat(ruby)}
+ if(active&&myId===runId){const ruby=await detectRubyKanji(result.data,myId);items=suppressRubyDuplicates(items.concat(ruby))}
  if(!active||myId!==runId)return;
- progressStep('Positioning labels…');const motion=motionLevel(frameSignature),largeMotion=motion>23;const currentFrame=trackingFrame();const elapsedMotion=captureFrame&&currentFrame?blockMotion(captureFrame,currentFrame):null;const frameDifference=captureFrame&&currentFrame?captureFrame.reduce((v,x,i)=>v+Math.abs(x-currentFrame[i]),0)/captureFrame.length:0;const placementTarget=cameraSnapshot();let placementMotion=elapsedMotion,captureValidation=motionRegistration(scanCapture,placementTarget,placementMotion);if(captureValidation.status!=='verified'){const stationary=motionRegistration(scanCapture,placementTarget,null);if(stationary.status==='verified'){placementMotion=null;captureValidation=stationary}}const aligned=placementMotion?items.map(it=>({...it,box:moveBox(it.box,placementMotion)})):items;if(window.meikiMetrics)window.meikiMetrics.lastCapturePlacement={validation:captureValidation,motion:placementMotion,frameDifference,items:items.length};const canPlace=captureValidation.status==='verified';const stable=canPlace?aligned:[];
+ progressStep('Positioning labels…');const motion=motionLevel(frameSignature),largeMotion=motion>23;const currentFrame=trackingFrame();const elapsedMotion=captureFrame&&currentFrame?blockMotion(captureFrame,currentFrame):null;const frameDifference=captureFrame&&currentFrame?captureFrame.reduce((v,x,i)=>v+Math.abs(x-currentFrame[i]),0)/captureFrame.length:0;const placementTarget=cameraSnapshot();let placementMotion=elapsedMotion,captureValidation=motionRegistration(scanCapture,placementTarget,placementMotion);if(captureValidation.status!=='verified'){const stationary=motionRegistration(scanCapture,placementTarget,null);if(stationary.status==='verified'){placementMotion=null;captureValidation=stationary}}const aligned=placementMotion?items.map(it=>({...it,box:moveBox(it.box,placementMotion),rubyBox:it.rubyBox?moveBox(it.rubyBox,placementMotion):undefined})):items;if(window.meikiMetrics)window.meikiMetrics.lastCapturePlacement={validation:captureValidation,motion:placementMotion,frameDifference,items:items.length};const canPlace=captureValidation.status==='verified';const stable=canPlace?aligned:[];
  // Reproject protected regions from the previous verified frame before replacing it.
  // If tracking cannot establish correspondence, do not transplant labels to a new page.
  let oldProjected=[];
@@ -1709,12 +1723,13 @@ async function scan(){if(document.hidden||!active||stillMode||busy||stillBusy||!
  // Preserve the last verified reference on transient OCR or tracking failure.
  // Never attach history to a different page without a verified image transform.
  if((items.length||oldProjected.length)&&canPlace){
-  const captureItems=protectRecognized(items,oldProjected,evidenceGroup);
+  const captureItems=suppressRubyDuplicates(protectRecognized(items,oldProjected,evidenceGroup));
+   protectedKana=captureItems.map(cloneRecognitionItem);kanaHistory=protectedKana.map(cloneRecognitionItem);
   referenceCanvas=scanCapture;
   referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
   rememberRecognition(scanCapture,captureItems,'live-frame');
   flowReset();
-  tracks=placementMotion?captureItems.map(it=>({...it,box:moveBox(it.box,placementMotion)})):captureItems;
+  tracks=placementMotion?captureItems.map(it=>({...it,box:moveBox(it.box,placementMotion),rubyBox:it.rubyBox?moveBox(it.rubyBox,placementMotion):undefined})):captureItems;
   lastFrame=frameSignature;
   alignOverlay();
   paint(tracks);
