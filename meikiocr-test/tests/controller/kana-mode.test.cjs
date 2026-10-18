@@ -16,5 +16,5 @@ test('mixed text only covers katakana with observed glyph positions',()=>{
  assert.equal(h.run('katakanaDisplayItems([{...mixed,kanaGlyphs:null}]).length'),0);
 });
 test('still mode retains branding and has its own dedicated close row',()=>{
- const h=setup();assert.match(h.html,/body\\.camera-still header \\.topbar\\{visibility:visible/);assert.match(h.html,/id="kana-mode"/);assert.match(h.html,/body\\.camera-still header \\.topbar #stop\\{display:none/);
+ const h=setup();assert.ok(h.html.includes('body.camera-still header .topbar{visibility:visible'));assert.ok(h.html.includes('id="kana-mode"'));assert.ok(h.html.includes('body.camera-still header .topbar #stop{display:none'));
 });
