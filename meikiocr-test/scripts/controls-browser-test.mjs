@@ -65,6 +65,18 @@ try{
   await page.click('#debug');assert.equal(await page.locator('#debug').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#debug .guides-off').evaluate(el=>getComputedStyle(el).display),'none');
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await visible();assert.ok(await page.evaluate(()=>window.scrollY)>0,'Page can scroll past portrait camera');
   await page.evaluate(()=>window.scrollTo(0,0));await page.click('#scan');await page.waitForFunction(()=>meikiCamera.getState().stillMode);assert.ok(!(await page.locator('#stop').isVisible()),'Back-to-start must disappear in Still');assert.ok(!(await page.locator('#scan').isVisible()),'Shutter must disappear in Still');assert.ok(await page.locator('#live-return').isVisible(),'Upper-left close must appear');assert.equal(await page.locator('#live-return').textContent(),'×');assert.ok(await page.locator('#pause-scan').isVisible(),'Still OCR control stays beside status');assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'none');
+  // Still header is above, rather than sandwiched between, the status row and options.
+  const stillLayout=await page.evaluate(()=>{
+    const box=selector=>{const b=document.querySelector(selector).getBoundingClientRect();return {x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height}};
+    return {title:box('header .topbar h1'),brand:box('header .brand'),close:box('#live-return'),status:box('#scan-indicator'),retry:box('#pause-scan'),options:box('#camera-options'),guide:box('#debug'),kana:box('#kana-mode'),long:box('#long-vowels'),light:box('#torch')};
+  });
+  assert.ok(await page.locator('header .topbar h1').isVisible()&&await brand.isVisible(),'Still displays both title and esaKITs');
+  assert.ok(stillLayout.title.y<stillLayout.close.y&&stillLayout.brand.y<stillLayout.close.y,'Title and esaKITs are the top row');
+  assert.ok(stillLayout.close.bottom<=stillLayout.guide.y&&stillLayout.retry.bottom<=stillLayout.guide.y,'Still close/progress/retry appear above settings');
+  assert.ok(Math.abs(stillLayout.status.y-stillLayout.retry.y)<4,'Retry shares the Finished/Scanning row');
+  assert.ok(stillLayout.retry.x>=stillLayout.status.right&&stillLayout.retry.x-stillLayout.status.right<=12,'Retry is immediately to the right of status');
+  assert.ok(stillLayout.guide.x<stillLayout.kana.x&&stillLayout.kana.x<stillLayout.long.x&&stillLayout.long.x<stillLayout.light.x,'Settings stay Guides, kana, vowels, light');
+  assert.ok(stillLayout.title.right<=stillLayout.brand.x+1,'Title does not overlap esaKITs in Still');
   await toggle.click();assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'paatii');assert.equal(await toggle.getAttribute('aria-pressed'),'false');
   await page.click('#live-return');await page.waitForFunction(()=>!meikiCamera.getState().stillMode);assert.ok(await page.locator('#stop').isVisible());assert.ok(await page.locator('#scan').isVisible());assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'pan-y');
   await page.setViewportSize({width,height:Math.max(320,height-100)});await visible();await toggle.click();assert.equal(await toggle.textContent(),'ā');await page.click('#stop');await page.waitForFunction(()=>!meikiCamera.getState().active);assert.equal(await page.evaluate(()=>testCameraTrack.readyState),'ended');assert.ok(await page.locator('#start').isVisible());
