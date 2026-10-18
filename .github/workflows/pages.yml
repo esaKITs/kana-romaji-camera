@@ -1,0 +1,66 @@
+name: Build, verify and publish camera
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: camera-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: meikiocr-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: meikiocr-test/package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Build and verify models, WASM and source licenses
+        run: npm run build
+      - name: Controller, palette and adapter regressions
+        run: npm test
+      - name: Install browser test runtimes
+        run: npx playwright install --with-deps chromium webkit
+      - name: Chromium actual OCR camera-stream integration
+        run: node scripts/browser-test.mjs
+      - name: WebKit actual OCR source-image inference
+        run: BROWSER=webkit node scripts/engine-browser-test.mjs
+      - name: Record published source revision
+        run: node -e 'require("fs").writeFileSync("dist/deployment.json", JSON.stringify({commit:process.env.GITHUB_SHA,engine:"MeikiOCR Web",runtime:"ONNX Runtime Web 1.30.0"})+"\n")'
+      - name: Read existing Pages configuration
+        uses: actions/configure-pages@v5
+      - name: Upload verified application
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: meikiocr-test/dist
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify public HTTPS application and served model hashes
+        env:
+          TEST_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          node scripts/verify-deployment.mjs
+          node scripts/browser-test.mjs
+      - name: Save verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-verification
+          path: |
+            meikiocr-test/tests/*browser-results.json
+            meikiocr-test/tests/*engine-results.json
+            meikiocr-test/tests/*-live.png

@@ -1,1 +1,11 @@
-{"name":"kana-romaji-camera","private":true,"scripts":{"test":"node --test tests/*.test.cjs"},"devDependencies":{"@napi-rs/canvas":"0.1.100"}}
+{
+  "name": "kana-romaji-camera",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix meikiocr-test run build",
+    "test": "npm --prefix meikiocr-test test"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "0.1.100"
+  }
+}
