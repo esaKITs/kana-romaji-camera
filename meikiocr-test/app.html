@@ -1456,7 +1456,7 @@ async function stillScan(){
   if(!worker){stillStatus('Preparing Japanese OCR…');if(!window.Tesseract)throw Error('OCR library unavailable');worker=await Tesseract.createWorker('jpn',1)}
   if(!stillMode||generation!==stillGeneration)return;
   // A tap is handled before the next full-frame pass. The running OCR call cannot be interrupted.
-  while(stillMode&&!stillPaused&&generation===stillGeneration){
+  while(!document.hidden&&stillMode&&!stillPaused&&generation===stillGeneration){
    if(focusRequest){
     const request=focusRequest;focusRequest=null;focusedScanning=true;setScanVisual('focused');
     const crop=focusCrop(source,request);
