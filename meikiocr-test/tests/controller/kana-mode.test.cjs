@@ -6,7 +6,7 @@ test('default kana mode preserves mixed and spaced hiragana labels',()=>{
  const h=setup();assert.equal(h.run('kanaMode'),'both');h.put('items',[reading('ねこ いぬ')]);h.run('paint(items)');assert.ok(h.drawn.includes('neko inu'));
 });
 test('katakana-only mode preserves hiragana and repaints previous OCR without rescan',()=>{
- const h=setup();h.put('items',[reading('ねこ'),reading('テレビ',90,{x0:340,y0:100,x1:500,y1:130})]);h.run('tracks=items;paint(items)');assert.ok(h.drawn.includes('neko'));assert.ok(h.drawn.includes('terebi'));h.drawn.length=0;
+ const h=setup();h.put('items',[reading('ねこ',90,{x0:100,y0:100,x1:190,y1:130}),reading('テレビ',90,{x0:280,y0:100,x1:420,y1:135})]);h.run('tracks=items;paint(items)');assert.ok(h.drawn.includes('neko'));assert.ok(h.drawn.includes('terebi'));h.drawn.length=0;
  h.emit('kana-mode','click',{});assert.equal(h.run('kanaMode'),'katakana');assert.equal(h.get('kana-mode').textContent,'ア');assert.ok(h.drawn.includes('terebi'));assert.ok(!h.drawn.includes('neko'));
  h.drawn.length=0;h.emit('kana-mode','click',{});assert.equal(h.run('kanaMode'),'both');assert.ok(h.drawn.includes('neko'));assert.ok(h.drawn.includes('terebi'));
 });
