@@ -15,7 +15,14 @@ try{
   },{torchSupported:name==='android'});
   await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});await page.click('#start');await page.waitForFunction(()=>meikiCamera.getState().active);
   const visible=async()=>{const b=await page.locator('#stop').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<=page.viewportSize().height,'Stop must stay inside visible viewport');assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).position),'fixed');};
-  await visible();assert.equal(await page.locator('#stop').textContent(),'');assert.ok(await page.locator('header #stop').isVisible(),'Back control must be top-left');assert.equal(await page.locator('.actions #stop').count(),0);
+  await visible();
+  const brand=page.locator('header .topbar .brand');
+  assert.ok(await brand.isVisible(),'esaKITs brand must remain visible in Live mode');
+  assert.equal(await brand.textContent(),'esaKITs');
+  const brandBounds=await brand.boundingBox();
+  assert.ok(brandBounds&&brandBounds.x+brandBounds.width<=width-8&&brandBounds.x>width*.65,'Brand remains right-aligned inside screen');
+  assert.ok((await page.locator('header .topbar h1').boundingBox()).x+(await page.locator('header .topbar h1').boundingBox()).width<=brandBounds.x,'Camera title must not overlap brand');
+  assert.equal(await page.locator('#stop').textContent(),'');assert.ok(await page.locator('header #stop').isVisible(),'Back control must be top-left');assert.equal(await page.locator('.actions #stop').count(),0);
   const rects=await page.evaluate(()=>{const rect=id=>{const r=document.querySelector(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height}};return {stage:rect('#stage'),video:rect('#video'),header:rect('header'),options:rect('#camera-options'),actions:rect('.actions'),scan:rect('#scan')}}); 
   assert.ok(Math.abs(rects.stage.top)<2,'Camera begins at the top of the viewport');
   assert.ok(rects.video.top<=rects.options.top&&rects.video.bottom>=rects.scan.bottom,'Camera extends behind top options and shutter');
