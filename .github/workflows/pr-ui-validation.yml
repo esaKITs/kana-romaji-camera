@@ -1,0 +1,49 @@
+name: Verify UI change (PR)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'meikiocr-test/**'
+      - '.github/workflows/pr-ui-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: meikiocr-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: meikiocr-test/package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Build and verify bundled OCR assets
+        run: npm run build
+      - name: Controller and adapter regressions
+        run: npm test
+      - name: Install browser dependencies
+        run: npx playwright install --with-deps chromium webkit
+      - name: Camera controls in phone and landscape viewports
+        run: node scripts/controls-browser-test.mjs
+      - name: Romanization toggles in Chromium and WebKit
+        run: |
+          node scripts/romanization-browser-test.mjs
+          BROWSER=webkit node scripts/romanization-browser-test.mjs
+      - name: Real OCR with synthetic camera in Chromium
+        run: node scripts/browser-test.mjs
+      - name: Actual inference on source images in WebKit
+        run: BROWSER=webkit node scripts/engine-browser-test.mjs
+      - name: Save test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-pr-verification
+          path: |
+            meikiocr-test/tests/*browser-results.json
+            meikiocr-test/tests/controls-*.png
