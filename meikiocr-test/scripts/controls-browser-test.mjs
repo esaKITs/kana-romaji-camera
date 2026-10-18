@@ -16,6 +16,13 @@ try{
   await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});await page.click('#start');await page.waitForFunction(()=>meikiCamera.getState().active);
   const visible=async()=>{const b=await page.locator('#stop').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<=page.viewportSize().height,'Stop must stay inside visible viewport');assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).position),'fixed');};
   await visible();let b=await page.locator('#debug').boundingBox();assert.ok(Math.abs(b.x+b.width/2-width/2)<2,'Guides must be centered');
+  const toggle=page.locator('#long-vowels'),toggleBox=await toggle.boundingBox(),guideBox=await page.locator('#debug').boundingBox();
+  assert.ok(toggleBox&&toggleBox.y+toggleBox.height<=height&&toggleBox.x>guideBox.x+guideBox.width,'Long vowels must remain reachable to the right of centered guides');
+  assert.equal(await toggle.textContent(),'aa');assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'paatii');
+  const oldGeneration=await page.evaluate(()=>meikiCamera.getState().runId);
+  await toggle.click();assert.equal(await toggle.textContent(),'ā');assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'pātī');
+  assert.equal(await page.evaluate(()=>meikiCamera.getState().runId),oldGeneration,'Display toggle must not restart OCR');
+  assert.equal(await toggle.getAttribute('aria-pressed'),'true');
   const light=await page.locator('#torch').boundingBox(),scan=await page.locator('#scan').boundingBox();assert.ok(Math.abs(light.y-scan.y)<2&&light.x+light.width<scan.x,'Light must be at the camera top beside Scan');assert.equal(await page.locator('.stage #torch').count(),1);assert.equal(await page.locator('.actions #torch').count(),0);
   if(name==='android'){await page.click('#torch');await page.waitForFunction(()=>document.getElementById('torch').getAttribute('aria-pressed')==='true');await page.click('#torch');await page.waitForFunction(()=>document.getElementById('torch').getAttribute('aria-pressed')==='false');assert.deepEqual(await page.evaluate(()=>mockTorchCalls),[true,false]);}else assert.ok(await page.locator('#torch').isDisabled());
   await page.screenshot({path:'tests/controls-'+name+'.png'});
@@ -24,8 +31,10 @@ try{
   await page.click('#debug');assert.equal(await page.locator('#debug').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#debug .guides-off').evaluate(el=>getComputedStyle(el).display),'none');
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await visible();assert.ok(await page.evaluate(()=>window.scrollY)>0,'Page can scroll past portrait camera');
   await page.evaluate(()=>window.scrollTo(0,0));await page.click('#scan');await page.waitForFunction(()=>meikiCamera.getState().stillMode);await visible();assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'none');
+  await toggle.click();assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'paatii');assert.equal(await toggle.getAttribute('aria-pressed'),'false');
   await page.click('#live-return');await page.waitForFunction(()=>!meikiCamera.getState().stillMode);assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'pan-y');
   await page.setViewportSize({width,height:Math.max(320,height-100)});await visible();await page.click('#stop');await page.waitForFunction(()=>!meikiCamera.getState().active);assert.equal(await page.evaluate(()=>testCameraTrack.readyState),'ended');assert.ok(await page.locator('#start').isVisible());
+  await toggle.click();await page.reload({waitUntil:'domcontentloaded'});assert.equal(await toggle.textContent(),'ā');assert.equal(await page.evaluate(()=>meikiCamera.romaji('パーティー')),'pātī');
   assert.deepEqual(errors,[]);results.push({name,width,height,realPhone:false,portraitCamera:true,stopReachable:true,guidesCentered:true,liveScrollAllowed:true,stillGesturesPreserved:true,torchAtCameraTop:true,torchHardwareTested:false,torchMockTested:name==='android',errors});console.log('PASS controls',name);await context.close();
  }
  await writeFile('tests/controls-browser-results.json',JSON.stringify(results,null,2));

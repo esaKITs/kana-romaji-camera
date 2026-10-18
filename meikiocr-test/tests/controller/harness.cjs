@@ -7,7 +7,7 @@ catch (error) {
   if (!process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES) throw error;
   canvas = require(path.join(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES, '@napi-rs/canvas'));
 }
-function load(file = process.env.APP_HTML || path.join(__dirname, '../../.testing/camera.html')) {
+function load(file = process.env.APP_HTML || path.join(__dirname, '../../.testing/camera.html'), options = {}) {
   const elements = new Map(), timers = new Map(), messages = [], drawn = [];
   let timerId = 0, now = 1000;
   function decorate(el) {
@@ -30,7 +30,7 @@ function load(file = process.env.APP_HTML || path.join(__dirname, '../../.testin
   }
   const context = vm.createContext({
     document: {getElementById:get, createElement: tag => { if(tag !== 'canvas') throw Error('Unexpected tag '+tag); return makeCanvas(); }},
-    window: {}, navigator: {}, performance: {now:() => now},
+    window: options.window || {}, navigator: {}, performance: {now:() => now},
     console: Object.fromEntries(['log','warn','debug','error'].map(k => [k,(...args)=>messages.push([k,...args])])),
     setTimeout: (fn,delay) => { timers.set(++timerId,{fn,delay}); return timerId; },
     clearTimeout: id => timers.delete(id), Uint8Array, Uint8ClampedArray, Float32Array,

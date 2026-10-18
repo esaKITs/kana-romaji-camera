@@ -1,0 +1,47 @@
+[
+  {
+    "name": "iphone",
+    "width": 390,
+    "height": 640,
+    "realPhone": false,
+    "portraitCamera": true,
+    "stopReachable": true,
+    "guidesCentered": true,
+    "liveScrollAllowed": true,
+    "stillGesturesPreserved": true,
+    "torchAtCameraTop": true,
+    "torchHardwareTested": false,
+    "torchMockTested": false,
+    "errors": []
+  },
+  {
+    "name": "android",
+    "width": 412,
+    "height": 700,
+    "realPhone": false,
+    "portraitCamera": true,
+    "stopReachable": true,
+    "guidesCentered": true,
+    "liveScrollAllowed": true,
+    "stillGesturesPreserved": true,
+    "torchAtCameraTop": true,
+    "torchHardwareTested": false,
+    "torchMockTested": true,
+    "errors": []
+  },
+  {
+    "name": "short-landscape",
+    "width": 844,
+    "height": 390,
+    "realPhone": false,
+    "portraitCamera": true,
+    "stopReachable": true,
+    "guidesCentered": true,
+    "liveScrollAllowed": true,
+    "stillGesturesPreserved": true,
+    "torchAtCameraTop": true,
+    "torchHardwareTested": false,
+    "torchMockTested": false,
+    "errors": []
+  }
+]

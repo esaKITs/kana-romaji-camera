@@ -18,7 +18,7 @@ test('spaced kana romaji actually reaches canvas',()=>{
  assert.ok(h.drawn.includes('neko inu'));
 });
 test('plain, contracted, geminate, particle and long vowel behavior is preserved',()=>{
- const h=setup();for(const [input,expected] of [['ぶ','bu'],['きゃ','kya'],['まっちゃ','matcha'],['は','wa'],['コーヒー','kōhī']]) assert.equal(h.run(`contextualRomaji(${JSON.stringify(input)})`),expected);
+ const h=setup();for(const [input,expected] of [['ぶ','bu'],['きゃ','kya'],['まっちゃ','matcha'],['は','wa'],['コーヒー','koohii']]) assert.equal(h.run(`contextualRomaji(${JSON.stringify(input)})`),expected);
 });
 test('confirmed full phrase retains its projected full box against fragments',()=>{
  const h=setup();h.put('old',[reading('ください',90,undefined,{state:'confirmed',votes:3})]);h.put('fresh',[reading('ださい',70,{x0:160,y0:100,x1:300,y1:130})]);

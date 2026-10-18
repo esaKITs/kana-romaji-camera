@@ -1,0 +1,12 @@
+{
+  "browser": "chromium",
+  "version": "153.0.8010.0",
+  "realPhone": false,
+  "cameraTested": false,
+  "conversions": 32,
+  "toggle": true,
+  "reloadPersistence": true,
+  "keyboard": true,
+  "errors": [],
+  "uploads": []
+}

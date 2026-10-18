@@ -6,8 +6,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "white",
-      "elapsedMs": 825,
-      "readyMs": 1424,
+      "elapsedMs": 1151,
+      "readyMs": 2546,
       "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
       "regions": [
         {
@@ -68,7 +68,7 @@
       "romaji": [
         "shitarishinaidekudasai",
         "shinaidekudasai",
-        "jasumintī",
+        "jasumintii",
         "anatano",
         "o",
         "ni"
@@ -80,8 +80,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "black",
-      "elapsedMs": 724,
-      "readyMs": 1424,
+      "elapsedMs": 870,
+      "readyMs": 2546,
       "text": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
       "regions": [
         {
@@ -149,9 +149,9 @@
         }
       ],
       "romaji": [
-        "kokōakenaidekudasai",
+        "kokooakenaidekudasai",
         "shitekudasai",
-        "kōhī",
+        "koohii",
         "kanai",
         "no",
         "no",
@@ -164,8 +164,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "white",
-      "elapsedMs": 711,
-      "readyMs": 1424,
+      "elapsedMs": 895,
+      "readyMs": 2546,
       "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
       "regions": [
         {
@@ -226,7 +226,7 @@
       "romaji": [
         "shitarishinaidekudasai",
         "shinaidekudasai",
-        "jasumintī",
+        "jasumintii",
         "anatano",
         "o",
         "ni"
@@ -238,8 +238,8 @@
       "realPhone": false,
       "cameraTested": false,
       "fixture": "white-large",
-      "elapsedMs": 816,
-      "readyMs": 1424,
+      "elapsedMs": 1030,
+      "readyMs": 2546,
       "text": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
       "regions": [
         {
@@ -299,7 +299,7 @@
       ],
       "romaji": [
         "shitarishinaidekudasai",
-        "jasumintī",
+        "jasumintii",
         "shinaidekudasai",
         "anatano",
         "ni",

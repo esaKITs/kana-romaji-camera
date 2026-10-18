@@ -29,6 +29,11 @@ try{
   let state=await page.evaluate(()=>({metrics:meikiMetrics,labels:drawnRomaji,state:meikiCamera.getState(),coi:crossOriginIsolated}));
   await page.screenshot({path:'tests/'+engineName+'-'+device+'-live.png',fullPage:true});
   console.log(device,JSON.stringify({readyMs:state.metrics.readyMs,firstLabelMs:state.metrics.firstLabelMs,scans:state.metrics.scans}));assert.ok(state.labels.some(t=>/kudasai|shinaide/.test(t)),'actual romaji rendered');assert.equal(state.coi,false,'Pages-compatible non-isolated path');assert.ok(state.metrics.scans.some(s=>s.text.includes('分解')),'mixed kanji OCR');assert.ok(state.metrics.scans.some(s=>s.text.includes('ジャスミン')),'katakana OCR');
+  assert.ok(state.labels.includes('jasumintii'),'Actual katakana OCR reaches double-vowel label');
+  await page.evaluate(()=>drawnRomaji.length=0);await page.click('#long-vowels');
+  await page.waitForFunction(()=>drawnRomaji.includes('jasumintī'),null,{timeout:10000});
+  await page.evaluate(()=>drawnRomaji.length=0);await page.click('#long-vowels');
+  await page.waitForFunction(()=>drawnRomaji.includes('jasumintii'),null,{timeout:10000});
   const firstCount=state.metrics.scans.length;
   await page.evaluate(()=>testScene('black'));await page.waitForFunction(n=>meikiMetrics.scans.length>n+1,firstCount,{timeout:120000});
   let black=await page.evaluate(()=>({metrics:meikiMetrics,state:meikiCamera.getState(),labels:drawnRomaji}));assert.ok(black.metrics.scans.slice(firstCount).some(s=>s.text.includes('あけないで')),'white on black OCR');assert.ok(black.state.objectEpoch>state.state.objectEpoch,'A new object resets history and palette even if optical flow fails');assert.ok(!black.state.tracks.some(t=>t.text.includes('しないで')),'old object label not restored');

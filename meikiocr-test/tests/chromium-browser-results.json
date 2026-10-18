@@ -3,36 +3,40 @@
     "device": "android-layout",
     "engine": "chromium 153.0.8010.0",
     "realPhone": false,
-    "initialMs": 1874.2999999998137,
-    "readyMs": 1253.1000000000931,
+    "initialMs": 3262.9000000003725,
+    "warmInitialMs": null,
+    "readyMs": 2267.7999999998137,
     "continuousMs": [
-      708.7000000001863,
-      757.2000000001863,
-      752
+      864.5999999996275,
+      943.5999999996275,
+      997
     ],
     "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
     "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
     "errors": [],
     "uploads": 0,
     "requests": 13,
-    "objectEpochAfterBlack": 1
+    "objectEpochAfterBlack": 1,
+    "servedAssets": []
   },
   {
     "device": "iphone-layout",
     "engine": "chromium 153.0.8010.0",
     "realPhone": false,
-    "initialMs": 1933.1000000000931,
-    "readyMs": 1316.8999999999069,
+    "initialMs": 2960.399999999441,
+    "warmInitialMs": null,
+    "readyMs": 1993.4000000003725,
     "continuousMs": [
-      743.5,
-      795.3999999999069,
-      785.2000000001863
+      923.7000000001863,
+      1050.2000000001863,
+      996.5999999996275
     ],
     "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
     "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
     "errors": [],
     "uploads": 0,
     "requests": 13,
-    "objectEpochAfterBlack": 1
+    "objectEpochAfterBlack": 1,
+    "servedAssets": []
   }
 ]

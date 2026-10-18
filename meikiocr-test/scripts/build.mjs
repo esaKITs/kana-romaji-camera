@@ -16,7 +16,12 @@ for(const asset of assets){
 }
 const source=await readFile('app.html','utf8');
 const match=source.match(/<script>([\s\S]*)<\/script>/);if(!match)throw Error('Camera controller missing');
-let code=match[1].replaceAll('window.Tesseract','window.MeikiOCR').replaceAll('Tesseract.createWorker','window.MeikiOCR.createWorker');
+const pronunciationBytes=await readFile('data/kana-pronunciations.json');
+const pronunciationMeta=JSON.parse(await readFile('data/kana-pronunciations.meta.json','utf8'));
+const pronunciationData=JSON.parse(pronunciationBytes);
+if(createHash('sha256').update(pronunciationBytes).digest('hex')!==pronunciationMeta.sha256||pronunciationBytes.length!==pronunciationMeta.bytes||Object.keys(pronunciationData).length!==pronunciationMeta.entries)throw Error('Pronunciation dictionary integrity');
+const romanization=await readFile('src/romanization-controller.js','utf8');
+let code=match[1].replace('/* ROMANIZATION_CONTROLLER */','const pronunciationLexicon='+JSON.stringify(pronunciationData)+';\n'+romanization).replaceAll('window.Tesseract','window.MeikiOCR').replaceAll('Tesseract.createWorker','window.MeikiOCR.createWorker');
 // The current baseline contains a missing statement separator. Fix the derived
 // experiment only; never edit the repository root's published application.
 code=code.replace('await ensureLiveWorker()if','await ensureLiveWorker();if');

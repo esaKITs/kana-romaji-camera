@@ -38,6 +38,10 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Portrait camera controls, scrolling and light-toggle interface
         run: node scripts/controls-browser-test.mjs
+      - name: Long-vowel toggle and persisted romanization in Chromium and WebKit
+        run: |
+          node scripts/romanization-browser-test.mjs
+          BROWSER=webkit node scripts/romanization-browser-test.mjs
       - name: Chromium actual OCR camera-stream integration
         run: node scripts/browser-test.mjs
       - name: WebKit actual OCR source-image inference
