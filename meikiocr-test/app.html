@@ -675,13 +675,31 @@ function flowWarpBox(b,t,output=work){
  return {x0:Math.min(...pts.map(p=>p[0])),y0:Math.min(...pts.map(p=>p[1])),x1:Math.max(...pts.map(p=>p[0])),y1:Math.max(...pts.map(p=>p[1]))};
 }
 
+// Sparse optical flow can temporarily lose its corners even on the same text.
+// Recover only from a separately fitted, pixel-verified image correspondence;
+// never keep stale labels merely because an OCR request is still in flight.
+function recoverLiveRegistration(){
+ if(!referenceCanvas||stillMode)return null;
+ const target=cameraSnapshot(),before=trackingFrame(referenceCanvas),after=trackingFrame(target);
+ const motion=before&&after?blockMotion(before,after):null;
+ if(!motion)return null;
+ const validation=motionRegistration(referenceCanvas,target,motion);
+ if(validation.status!=='verified')return null;
+ const {A,B,tx,ty}=motion;
+ return {m:[A,-B,tx,B,A,ty,0,0,1],W:160,H:120,refW:referenceCanvas.width,refH:referenceCanvas.height};
+}
 async function trackTick(){
  if(!active)return;
  if(stillMode){if(active)trackingTimer=setTimeout(trackTick,80);return}
  if(referenceCanvas&&referenceItems.length&&!featureBusy){
   featureBusy=true;
   try{
-   const located=flowLocate();
+   let located=null;
+   try{located=flowLocate()}catch(e){featureFailure=String(e.message||e);lastRegistrationStatus='unavailable'}
+   if(!located&&lastRegistrationStatus!=='mismatch'){
+    located=recoverLiveRegistration();
+    if(located)lastRegistrationStatus='verified';
+   }
    if(located){
     const moved=referenceItems.map(it=>({...it,box:flowWarpBox(it.box,located)})).filter(it=>it.box);
     if(moved.length){tracks=moved;paint(moved);flowFailures=0;flowLastSuccess=performance.now()}

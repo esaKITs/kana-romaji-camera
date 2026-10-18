@@ -80,3 +80,33 @@ test('an earlier object epoch cannot transfer even an identical cached image',()
 test('Live return cannot seed a previous object epoch into reference tracking',()=>{
  const h=setup();h.put('items',[reading()]);h.run('rememberRecognition(work,items,"still-frame");objectEpoch++;stillMode=true;stillSource=work;stillItems=[];exitStill()');assert.equal(h.run('referenceItems.length'),0);
 });
+
+for(const failure of ['uncertain','exception'])test('same textured target keeps visible labels during optical-flow '+failure,async()=>{
+ const h=setup(),source=h.makeCanvas();paintPattern(source);h.put('source',source);h.put('items',[reading()]);
+ h.run('wc.drawImage(source,0,0);video.getContext("2d").drawImage(source,0,0);referenceCanvas=source;referenceItems=items;tracks=items;paint(items)');
+ h.run(failure==='exception'?'flowLocate=()=>{throw Error("temporary flow failure")}':'flowLocate=()=>{lastRegistrationStatus="uncertain";return null}');
+ for(let i=0;i<8;i++){await h.run('trackTick()');h.advance(65);assert.equal(h.run('tracks.length'),1);assert.ok(h.get('overlay').getContext('2d').getImageData(105,105,1,1).data[3]>0);}
+ assert.equal(h.run('objectEpoch'),0);
+});
+test('fallback tracking projects same-object translation instead of freezing old coordinates',async()=>{
+ const h=setup(),source=h.makeCanvas();paintPattern(source);h.put('source',source);h.put('target',transformed(h,source,0,16,8));h.put('items',[reading()]);
+ h.run('referenceCanvas=source;referenceItems=items;tracks=items;video.getContext("2d").drawImage(target,0,0);flowLocate=()=>{lastRegistrationStatus="uncertain";return null}');
+ await h.run('trackTick()');await h.run('trackTick()');assert.equal(h.run('tracks.length'),1);assert.ok(Math.abs(h.run('tracks[0].box.x0')-116)<5);assert.ok(Math.abs(h.run('tracks[0].box.y0')-108)<5);
+});
+test('fallback never keeps old labels on another white package',async()=>{
+ const h=setup(),source=h.makeCanvas(),target=h.makeCanvas();paintPattern(source);const q=target.getContext('2d');q.fillStyle='#f5f5f5';q.fillRect(0,0,640,360);q.fillStyle='#151515';for(let y=55;y<340;y+=28)for(let x=60;x<620;x+=45)q.fillRect(x,y,20,9);
+ h.put('source',source);h.put('target',target);h.put('items',[reading()]);h.run('referenceCanvas=source;referenceItems=items;tracks=items;video.getContext("2d").drawImage(target,0,0);flowLocate=()=>{lastRegistrationStatus="uncertain";return null}');
+ await h.run('trackTick()');await h.run('trackTick()');assert.equal(h.run('tracks.length'),0);
+});
+
+test('fallback follows a small same-object rotation with verified coordinates',async()=>{
+ const h=setup(),source=h.makeCanvas();paintPattern(source);h.put('source',source);h.put('target',transformed(h,source,.04));h.put('items',[reading()]);
+ h.run('referenceCanvas=source;referenceItems=items;tracks=items;video.getContext("2d").drawImage(target,0,0);flowLocate=()=>{lastRegistrationStatus="uncertain";return null}');
+ await h.run('trackTick()');await h.run('trackTick()');assert.equal(h.run('tracks.length'),1);assert.ok(Math.abs(h.run('tracks[0].box.y0')-91)<6);assert.equal(h.run('objectEpoch'),0);
+});
+test('verified fallback restores labels after a truly uncertain frame without destroying evidence',async()=>{
+ const h=setup(),source=h.makeCanvas();paintPattern(source);h.put('source',source);h.put('items',[reading()]);
+ h.run('referenceCanvas=source;referenceItems=items;protectedKana=items;tracks=items;flowLocate=()=>{lastRegistrationStatus="uncertain";return null}');
+ await h.run('trackTick()');await h.run('trackTick()');assert.equal(h.run('tracks.length'),0);
+ h.run('video.getContext("2d").drawImage(source,0,0)');await h.run('trackTick()');assert.equal(h.run('tracks.length'),1);assert.equal(h.run('protectedKana.length'),1);
+});
