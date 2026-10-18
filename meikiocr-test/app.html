@@ -51,7 +51,7 @@ body.camera-still{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
 /* Full-bleed camera: controls float over the same camera pixels as the OCR overlay.
    Keep video, captured Still and canvas overlay on the same center-cropped geometry. */
 body.camera-active{padding-bottom:0}
-body.camera-active header{position:absolute;top:0;left:0;right:0;z-index:14;padding:calc(12px + env(safe-area-inset-top,0px)) 14px 8px;background:transparent;pointer-events:none}
+body.camera-active header{position:fixed;top:0;left:0;right:0;z-index:14;padding:calc(12px + env(safe-area-inset-top,0px)) 14px 8px;background:transparent;pointer-events:none}
 body.camera-active header .topbar{min-height:40px;text-shadow:0 1px 5px #000b}
 body.camera-active header .topbar h1,body.camera-active header .brand{filter:drop-shadow(0 1px 2px #000a)}
 body.camera-active header .camera-options{background:transparent;padding:10px 0 0;pointer-events:auto}
