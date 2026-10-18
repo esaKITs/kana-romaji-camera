@@ -14,8 +14,10 @@ npm test
 
 `meikiocr-test/app.html` is the camera/controller template. The build generates its MeikiOCR controller, bundles the module Worker, validates pinned models/runtime assets, and includes license notices and corresponding source. Models are downloaded during build and served from this repository's Pages deployment.
 
-`.github/workflows/pages.yml` gates publication on all 120 controller/adapter regressions, Chromium camera-stream integration and WebKit source-image inference. It also tests the published HTTPS application and served model/WASM hashes. `deployment.json` identifies the published commit.
+`.github/workflows/pages.yml` gates publication on all 134 controller/adapter regressions, Chromium camera-stream integration and WebKit source-image inference. It also tests the published HTTPS application and served model/WASM hashes. `deployment.json` identifies the published commit.
 
 The GitHub Pages build publishes the same functional application whose recognition and black-to-white label color were confirmed by the user on iPhone. Physical Android Chrome, long sessions, memory limits and varied real packaging remain unverified. Synthetic phone-sized Chromium tests are not real-phone tests. Kanji readings are not invented: the existing verified-ruby policy is preserved.
 
 See [implementation and verification](meikiocr-test/REVIEW.md), [OCR build details](meikiocr-test/README.md), and the deployed `licenses/NOTICE.html` for the combined distribution's licenses (MeikiOCR Web GPL-3.0-only, models LGPL-3.0, runtime MIT; original application MIT).
+
+During camera use, a fixed bottom bar exposes Stop (left), position guides (center) and camera light (right). Normal Live view allows vertical page scrolling; Still selection and zoomed panning retain their custom gestures. Light is enabled only when the active camera track advertises torch support. Physical LED behavior requires device confirmation.

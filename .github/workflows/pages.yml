@@ -36,6 +36,8 @@ jobs:
         run: OPENCV_JS=./public/vendor/opencv.js node scripts/opencv-test.cjs
       - name: Install browser test runtimes
         run: npx playwright install --with-deps chromium webkit
+      - name: Portrait camera controls, scrolling and light-toggle interface
+        run: node scripts/controls-browser-test.mjs
       - name: Chromium actual OCR camera-stream integration
         run: node scripts/browser-test.mjs
       - name: WebKit actual OCR source-image inference

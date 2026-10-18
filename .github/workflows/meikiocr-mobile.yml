@@ -29,6 +29,9 @@ jobs:
       - name: Install browser test runtimes
         working-directory: meikiocr-test
         run: npx playwright install --with-deps chromium webkit
+      - name: Portrait camera controls, scrolling and light-toggle interface
+        working-directory: meikiocr-test
+        run: node scripts/controls-browser-test.mjs
       - name: Chromium actual Worker and camera-stream integration
         working-directory: meikiocr-test
         run: node scripts/browser-test.mjs
