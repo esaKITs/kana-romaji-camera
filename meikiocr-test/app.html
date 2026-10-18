@@ -1725,7 +1725,7 @@ async function scan(){if(document.hidden||!active||stillMode||busy||stillBusy||!
  if(myId!==runId)return;progressStep('');lastRecognitionDetails={text:result.data.text,items:items.map(cloneRecognitionItem),diagnosis:diagnoseKanaExtraction(result.data,items)};renderRecognitionDetails();$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active&&!document.hidden){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,focusRequest?0:200)}}}}
 // Safari app switching suspends timers and may stop a camera track. Do not
 // schedule repeated OCR work while hidden; reuse the existing session on return.
-document.addEventListener('visibilitychange',()=>{
+document.addEventListener?.('visibilitychange',()=>{
  if(!active)return;
  if(document.hidden){
   clearTimeout(trackingTimer);trackingTimer=null;
