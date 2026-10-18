@@ -16,7 +16,7 @@ try{
   await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});await page.click('#start');await page.waitForFunction(()=>meikiCamera.getState().active);
   const visible=async()=>{const b=await page.locator('#stop').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<=page.viewportSize().height,'Stop must stay inside visible viewport');assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).position),'fixed');};
   await visible();let b=await page.locator('#debug').boundingBox();assert.ok(Math.abs(b.x+b.width/2-width/2)<2,'Guides must be centered');
-  const light=await page.locator('#torch').boundingBox();assert.ok(light.x>b.x+b.width,'Light must be on the right of centered guides');
+  const light=await page.locator('#torch').boundingBox(),scan=await page.locator('#scan').boundingBox();assert.ok(Math.abs(light.y-scan.y)<2&&light.x+light.width<scan.x,'Light must be at the camera top beside Scan');assert.equal(await page.locator('.stage #torch').count(),1);assert.equal(await page.locator('.actions #torch').count(),0);
   if(name==='android'){await page.click('#torch');await page.waitForFunction(()=>document.getElementById('torch').getAttribute('aria-pressed')==='true');await page.click('#torch');await page.waitForFunction(()=>document.getElementById('torch').getAttribute('aria-pressed')==='false');assert.deepEqual(await page.evaluate(()=>mockTorchCalls),[true,false]);}else assert.ok(await page.locator('#torch').isDisabled());
   await page.screenshot({path:'tests/controls-'+name+'.png'});
   assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'pan-y');assert.equal(await page.locator('#video').evaluate(el=>getComputedStyle(el).touchAction),'pan-y');
@@ -26,7 +26,7 @@ try{
   await page.evaluate(()=>window.scrollTo(0,0));await page.click('#scan');await page.waitForFunction(()=>meikiCamera.getState().stillMode);await visible();assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'none');
   await page.click('#live-return');await page.waitForFunction(()=>!meikiCamera.getState().stillMode);assert.equal(await page.locator('#stage').evaluate(el=>getComputedStyle(el).touchAction),'pan-y');
   await page.setViewportSize({width,height:Math.max(320,height-100)});await visible();await page.click('#stop');await page.waitForFunction(()=>!meikiCamera.getState().active);assert.equal(await page.evaluate(()=>testCameraTrack.readyState),'ended');assert.ok(await page.locator('#start').isVisible());
-  assert.deepEqual(errors,[]);results.push({name,width,height,realPhone:false,portraitCamera:true,stopReachable:true,guidesCentered:true,liveScrollAllowed:true,stillGesturesPreserved:true,torchHardwareTested:false,torchMockTested:name==='android',errors});console.log('PASS controls',name);await context.close();
+  assert.deepEqual(errors,[]);results.push({name,width,height,realPhone:false,portraitCamera:true,stopReachable:true,guidesCentered:true,liveScrollAllowed:true,stillGesturesPreserved:true,torchAtCameraTop:true,torchHardwareTested:false,torchMockTested:name==='android',errors});console.log('PASS controls',name);await context.close();
  }
  await writeFile('tests/controls-browser-results.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.close()}

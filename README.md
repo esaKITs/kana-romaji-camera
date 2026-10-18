@@ -20,4 +20,4 @@ The GitHub Pages build publishes the same functional application whose recogniti
 
 See [implementation and verification](meikiocr-test/REVIEW.md), [OCR build details](meikiocr-test/README.md), and the deployed `licenses/NOTICE.html` for the combined distribution's licenses (MeikiOCR Web GPL-3.0-only, models LGPL-3.0, runtime MIT; original application MIT).
 
-During camera use, a fixed bottom bar exposes Stop (left), position guides (center) and camera light (right). Normal Live view allows vertical page scrolling; Still selection and zoomed panning retain their custom gestures. Light is enabled only when the active camera track advertises torch support. Physical LED behavior requires device confirmation.
+During camera use, a fixed bottom bar exposes Stop (left) and position guides (center). The camera light is at the top of the camera view beside Scan. Normal Live view allows vertical page scrolling; Still selection and zoomed panning retain their custom gestures. Light is enabled only when the active camera track advertises torch support. Physical LED behavior requires device confirmation.
