@@ -13,7 +13,12 @@ try{
    const c=document.createElement('canvas');c.width=640;c.height=1136;const q=c.getContext('2d');q.fillStyle='#ddd';q.fillRect(0,0,c.width,c.height);let n=0;setInterval(()=>{q.fillStyle=n++%2?'#111':'#222';q.fillRect(0,0,20,20)},50);
    Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{const s=c.captureStream(20);window.testCameraTrack=s.getVideoTracks()[0];window.mockTorchCalls=[];if(torchSupported){let on=false;Object.defineProperties(window.testCameraTrack,{getCapabilities:{value:()=>({torch:true})},getSettings:{value:()=>({torch:on})},getConstraints:{value:()=>({width:{ideal:640}})},applyConstraints:{value:async constraints=>{mockTorchCalls.push(constraints.torch);on=constraints.torch}}});}return s}});
   },{torchSupported:name==='android'});
-  await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});await page.click('#start');await page.waitForFunction(()=>meikiCamera.getState().active);
+  await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});
+  assert.equal(await page.locator('meta[name="apple-mobile-web-app-title"]').getAttribute('content'),'Kana→Romaji','iOS short home-screen title');
+  assert.ok(await page.locator('.home-screen-tip').isVisible(),'iPhone home-screen tip appears on start screen');
+  assert.match(await page.locator('.home-screen-tip').innerText(),/Add to Home Screen/);
+  await page.click('#start');await page.waitForFunction(()=>meikiCamera.getState().active);
+  assert.ok(!(await page.locator('.home-screen-tip').isVisible()),'Tip does not intrude on full-bleed camera');
   const visible=async()=>{const b=await page.locator('#stop').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<=page.viewportSize().height,'Stop must stay inside visible viewport');assert.equal(await page.locator('.actions').evaluate(el=>getComputedStyle(el).position),'fixed');};
   await visible();
   const brand=page.locator('header .topbar .brand');
