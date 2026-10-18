@@ -966,7 +966,7 @@ function recoverLiveRegistration(){
  return {m:[A,-B,tx,B,A,ty,0,0,1],W:160,H:120,refW:referenceCanvas.width,refH:referenceCanvas.height};
 }
 async function trackTick(){
- if(!active)return;
+ if(!active||document.hidden)return;
  if(stillMode){if(active)trackingTimer=setTimeout(trackTick,80);return}
  if(referenceCanvas&&referenceItems.length&&!featureBusy){
   featureBusy=true;
@@ -1448,7 +1448,7 @@ function stillImageVariant(source,variant){
  return {canvas:c,factor};
 }
 async function stillScan(){
- if(!active||!stillMode||stillPaused||busy||stillBusy||!stillSource)return;
+ if(document.hidden||!active||!stillMode||stillPaused||busy||stillBusy||!stillSource)return;
  stillPending=false;stillBusy=true;stillError=false;stillButton();
  const generation=stillGeneration,source=stillSource;let focusedScanFailure=false;
  work.width=source.width;work.height=source.height;wc.drawImage(source,0,0);
@@ -1599,7 +1599,7 @@ function ensureLiveWorker(){
  })().catch(e=>{liveWorkerPromise=null;throw e});
  return liveWorkerPromise;
 }
-async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId,evidenceGroup='live-'+(++captureSerial),requestedFocus=focusRequest;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker)await ensureLiveWorker()if(!active||myId!==runId)return;const scale=Math.min(1,(referenceItems.length?1280:960)/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame(scanCapture);const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
+async function scan(){if(document.hidden||!active||stillMode||busy||stillBusy||!video.videoWidth)return;busy=true;scanRequested=false;manualScanPending=false;const myId=runId,evidenceGroup='live-'+(++captureSerial),requestedFocus=focusRequest;const started=performance.now();try{progressStep(worker?'Recognizing kana…':'Preparing Japanese OCR…');$('status').textContent=worker?'Recognizing…':'Preparing Japanese OCR…';if(!worker)await ensureLiveWorker()if(!active||myId!==runId)return;const scale=Math.min(1,(referenceItems.length?1280:960)/Math.max(video.videoWidth,video.videoHeight));work.width=Math.round(video.videoWidth*scale);work.height=Math.round(video.videoHeight*scale);wc.drawImage(video,0,0,work.width,work.height);const scanCapture=document.createElement('canvas');scanCapture.width=work.width;scanCapture.height=work.height;scanCapture.getContext('2d').drawImage(work,0,0);const captureFrame=trackingFrame(scanCapture);const frameSignature=imageSignature();const result=await worker.recognize(work,{}, {text:true,blocks:true});if(!active||myId!==runId)return;progressStep('Detecting text lines…');let items=rebuildRows(extract(result.data));
  // Show the first usable kana without waiting for refinement.
  if(items.length&&!stillMode&&!referenceItems.length){
   const initial=items.filter(it=>it.box&&kanaOnly.test(it.text)).map(it=>({...it,state:'provisional',votes:1,source:evidenceGroup,support:{[it.text]:{text:it.text,groups:[evidenceGroup],confidence:it.confidence??50}}}));
@@ -1722,7 +1722,26 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
   lastFrame=frameSignature;
   if(!historyFresh){protectedKana=[];kanaHistory=[]}
  }
- if(myId!==runId)return;progressStep('');lastRecognitionDetails={text:result.data.text,items:items.map(cloneRecognitionItem),diagnosis:diagnoseKanaExtraction(result.data,items)};renderRecognitionDetails();$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,focusRequest?0:200)}}}}
+ if(myId!==runId)return;progressStep('');lastRecognitionDetails={text:result.data.text,items:items.map(cloneRecognitionItem),diagnosis:diagnoseKanaExtraction(result.data,items)};renderRecognitionDetails();$('status').textContent='Detected: '+items.length+' regions / '+((performance.now()-started)/1000).toFixed(1)+' s';}catch(e){if(myId===runId){progressStep('');$('status').textContent='Recognition error: '+e.message}}finally{busy=false;if(active&&!document.hidden){if(stillMode){if(stillPending)setTimeout(stillScan,0)}else if(manualScanPending||myId!==runId){setTimeout(scan,0)}else{if($('scan').classList.contains('rescanning')){$('scan').classList.remove('rescanning');$('scan').setAttribute('aria-label','Scan now');$('scan').title='Scan now'}setTimeout(scan,focusRequest?0:200)}}}}
+// Safari app switching suspends timers and may stop a camera track. Do not
+// schedule repeated OCR work while hidden; reuse the existing session on return.
+document.addEventListener('visibilitychange',()=>{
+ if(!active)return;
+ if(document.hidden){
+  clearTimeout(trackingTimer);trackingTimer=null;
+  return;
+ }
+ if(stillMode){
+  if(!stillPaused&&!stillBusy){stillPending=true;setTimeout(stillScan,0)}
+  return;
+ }
+ if(stream?.getVideoTracks().some(t=>t.readyState==='ended')){
+  $('status').textContent='Camera was interrupted. Close and start the camera again.';
+  return;
+ }
+ resumeTracking();
+ if(!busy&&!stillBusy)setTimeout(scan,0);
+});
 $('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');const ocrWarmup=ensureLiveWorker();stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();configureTorch();updateCameraViewport();hasShownLabels=false;documentLabelPalette={epoch:-1,paper:null};protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
 $('stop').onclick=()=>{lastRecognitionDetails=null;if(stillMode)exitStill();resetZoom();active=false;resetTorch();updateCameraInteraction();runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};documentLabelPalette={epoch:-1,paper:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
