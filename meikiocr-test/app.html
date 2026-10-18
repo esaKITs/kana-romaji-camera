@@ -171,7 +171,7 @@ function contextualRomaji(text){
  }
  return romaji(t);
 }
-const kanaOnly=/^[ぁ-ゖァ-ヺー・\\s]+$/;
+const kanaOnly=/^[ぁ-ゖァ-ヺー・\s]+$/;
 const kanaModeStorageKey='esakits.kana-romaji.kana-mode.v1';
 let kanaMode='both';
 try{if(window.localStorage?.getItem(kanaModeStorageKey)==='katakana')kanaMode='katakana'}catch{}
@@ -644,7 +644,7 @@ function katakanaDisplayItems(items){
  const result=[];
  for(const item of items){
   if(item.rubyKanji)continue;
-  if(/^[ァ-ヺー・\\s]+$/.test(item.text)){result.push(item);continue}
+  if(/^[ァ-ヺー・\s]+$/.test(item.text)){result.push(item);continue}
   const glyphs=item.kanaGlyphs;
   if(!glyphs?.length||glyphs.map(g=>g.text).join('')!==item.text)continue;
   const display=item.displayBox||item.box;
