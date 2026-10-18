@@ -81,10 +81,10 @@ test('Live return cannot seed a previous object epoch into reference tracking',(
  const h=setup();h.put('items',[reading()]);h.run('rememberRecognition(work,items,"still-frame");objectEpoch++;stillMode=true;stillSource=work;stillItems=[];exitStill()');assert.equal(h.run('referenceItems.length'),0);
 });
 
-for(const failure of ['uncertain','exception'])test('same textured target keeps visible labels during optical-flow '+failure,async()=>{
+for(const failure of ['uncertain','exception','mismatch'])test('same textured target keeps visible labels during optical-flow '+failure,async()=>{
  const h=setup(),source=h.makeCanvas();paintPattern(source);h.put('source',source);h.put('items',[reading()]);
  h.run('wc.drawImage(source,0,0);video.getContext("2d").drawImage(source,0,0);referenceCanvas=source;referenceItems=items;tracks=items;paint(items)');
- h.run(failure==='exception'?'flowLocate=()=>{throw Error("temporary flow failure")}':'flowLocate=()=>{lastRegistrationStatus="uncertain";return null}');
+ h.run(failure==='exception'?'flowLocate=()=>{throw Error("temporary flow failure")}':'flowLocate=()=>{lastRegistrationStatus="'+failure+'";return null}');
  for(let i=0;i<8;i++){await h.run('trackTick()');h.advance(65);assert.equal(h.run('tracks.length'),1);assert.ok(h.get('overlay').getContext('2d').getImageData(105,105,1,1).data[3]>0);}
  assert.equal(h.run('objectEpoch'),0);
 });

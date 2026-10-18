@@ -696,7 +696,7 @@ async function trackTick(){
   try{
    let located=null;
    try{located=flowLocate()}catch(e){featureFailure=String(e.message||e);lastRegistrationStatus='unavailable'}
-   if(!located&&lastRegistrationStatus!=='mismatch'){
+   if(!located){
     located=recoverLiveRegistration();
     if(located)lastRegistrationStatus='verified';
    }
