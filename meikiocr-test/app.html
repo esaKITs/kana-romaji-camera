@@ -650,8 +650,10 @@ function suppressRubyDuplicates(items){
  return items.filter(it=>{
   if(it.rubyKanji)return true;
   const box=it.box;
-  if(!box)return true;
-  return !rubies.some(r=>it.text===r.text&&intersection(box,r.rubyBox)/area(box)>=.7);
+  if(!box||!/^[ぁ-ゖー]+$/.test(it.text))return true;
+  // OCR may split a verified ruby into several kana runs. Suppress only
+  // kana wholly inside its verified ruby box, not neighboring body text.
+  return !rubies.some(r=>intersection(box,r.rubyBox)/area(box)>=.75&&area(box)<=area(r.rubyBox)*1.15);
  });
 }
 // Filter display labels using actual OCR glyph geometry, not inferred character widths.
