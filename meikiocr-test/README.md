@@ -13,3 +13,5 @@ See `tests/browser-results.json` and `REVIEW.md` for observed results and limits
 Deployment compatibility: the exact upstream client/worker and source maps are vendored in `vendor/meikiocr-web/` with upstream hashes/notices. NPM dependencies come only from the public registry; no GitHub Git dependency or private registry is required. This is the same code as the tested pinned package, and produced byte-identical runtime bundles after vendoring.
 
 Large Still/Focused variants are normalized below 4 million pixels before transfer, with separate exact x/y coordinate mapping back to the original image. Alignment scripts load asynchronously so their large OpenCV download does not gate camera controls or OCR initialization.
+
+Public experiment: https://kana-romaji-meiki-experiment.esakit.chatgpt.site/ . Detailed findings and verification limits: [REVIEW.md](REVIEW.md). Physical iPhone Safari and Android Chrome remain unverified; use the separate experiment before deciding whether to adopt it in production.

@@ -23,7 +23,7 @@ try{
    setInterval(draw,50);
    Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{if(!scene)await window.testScene('white');return videoCanvas.captureStream(20);}});
   },{fixtureData});
-  await page.goto(process.env.TEST_URL||origin,{waitUntil:'domcontentloaded'});await page.click('#start');
+  await page.goto(process.env.TEST_URL||origin,{waitUntil:'domcontentloaded'});if(process.env.EXPECTED_BUNDLE)assert.ok((await page.locator('script[type=module]').getAttribute('src')).includes(process.env.EXPECTED_BUNDLE),'The published build must match the tested revision');await page.click('#start');
   try{await page.waitForFunction(()=>Number.isFinite(window.meikiMetrics?.firstLabelMs),null,{timeout:60000});}catch(e){console.error('STARTUP DIAGNOSTICS',JSON.stringify(await page.evaluate(()=>({status:document.getElementById('status').textContent,metrics:window.meikiMetrics,state:window.meikiCamera?.getState(),video:{ready:document.getElementById('video').readyState,width:document.getElementById('video').videoWidth}}))),errors);throw e;}
   await page.waitForFunction(()=>window.meikiMetrics.scans.length>=4,null,{timeout:120000});
   let state=await page.evaluate(()=>({metrics:meikiMetrics,labels:drawnRomaji,state:meikiCamera.getState(),coi:crossOriginIsolated}));
@@ -39,9 +39,14 @@ try{
   await page.click('#pause-scan');await page.click('#live-return');await page.waitForFunction(()=>!meikiCamera.getState().stillMode,null,{timeout:10000});
   await page.click('#stop');await page.waitForFunction(()=>!meikiCamera.getState().active);
   let warmInitialMs=null;if(process.env.TEST_URL){await page.reload({waitUntil:'domcontentloaded'});await page.click('#start');await page.waitForFunction(()=>Number.isFinite(window.meikiMetrics?.firstLabelMs),null,{timeout:60000});warmInitialMs=await page.evaluate(()=>meikiMetrics.firstLabelMs);await page.click('#stop');}
+  let servedAssets=[];
+  if(process.env.TEST_URL&&device==='android-layout'){
+   servedAssets=await page.evaluate(async()=>{const manifest=await(await fetch('./ocr-assets/manifest.json')).json(),out=[];for(const asset of [...manifest.models,...manifest.runtime]){const data=await(await fetch('./ocr-assets/'+asset.path)).arrayBuffer();out.push({path:asset.path,bytes:data.byteLength,sha256:[...new Uint8Array(await crypto.subtle.digest('SHA-256',data))].map(n=>n.toString(16).padStart(2,'0')).join('')});}return out;});
+   const expected=JSON.parse(await readFile(resolve(root,'ocr-assets/manifest.json'),'utf8'));for(const asset of [...expected.models,...expected.runtime]){const actual=servedAssets.find(a=>a.path===asset.path);assert.equal(actual.bytes,asset.byteLength);assert.equal(actual.sha256,asset.sha256);}
+  }
   assert.equal(uploads.length,0,'No image/text POST requests');assert.equal(errors.length,0,errors.join('\n'));assert.ok(!network.some(u=>/tesseract|traineddata|jsep/.test(u)),'No Tesseract or GPU downloads');
   await page.screenshot({path:'tests/'+device+'.png',fullPage:true});
-  results.push({device,engine:engineName+' '+browser.version(),realPhone:false,initialMs:state.metrics.firstLabelMs,warmInitialMs,readyMs:state.metrics.readyMs,continuousMs:state.metrics.scans.slice(1).map(s=>s.ms),whiteText:state.metrics.scans[0].text,blackText:black.metrics.scans.at(-1).text,errors,uploads:uploads.length,requests:network.length,objectEpochAfterBlack:epoch});
+  results.push({device,engine:engineName+' '+browser.version(),realPhone:false,initialMs:state.metrics.firstLabelMs,warmInitialMs,readyMs:state.metrics.readyMs,continuousMs:state.metrics.scans.slice(1).map(s=>s.ms),whiteText:state.metrics.scans[0].text,blackText:black.metrics.scans.at(-1).text,errors,uploads:uploads.length,requests:network.length,objectEpochAfterBlack:epoch,servedAssets});
   await context.close();console.log('PASS',device);
  }
  await writeFile('tests/'+(process.env.TEST_URL?'published-':'')+engineName+'-browser-results.json',JSON.stringify(results,null,2));

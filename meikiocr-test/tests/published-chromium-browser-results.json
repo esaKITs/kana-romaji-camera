@@ -3,36 +3,61 @@
     "device": "android-layout",
     "engine": "chromium 153.0.8010.0",
     "realPhone": false,
-    "initialMs": 5918.799999999814,
-    "readyMs": 5211.600000000093,
+    "initialMs": 6674.100000000093,
+    "warmInitialMs": 3587.7999999998137,
+    "readyMs": 5934.5,
     "continuousMs": [
-      701.2999999998137,
-      732.7999999998137,
-      782.7999999998137
+      723.6000000000931,
+      784.1000000000931,
+      728.7999999998137
     ],
     "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
     "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
     "errors": [],
     "uploads": 0,
-    "requests": 13,
-    "objectEpochAfterBlack": 1
+    "requests": 29,
+    "objectEpochAfterBlack": 1,
+    "servedAssets": [
+      {
+        "path": "meiki.text.detect.v0.1.960x544.onnx",
+        "bytes": 14503825,
+        "sha256": "40b6a016667745cae7d3055929ae3b8b1e7716aac795f5904cd3c2c7c3b8404b"
+      },
+      {
+        "path": "meiki.text.rec.v0.960x32.onnx",
+        "bytes": 18593254,
+        "sha256": "3e96bc772fbee9717e536a6353032bb944c3382dd2f6960ef4890decda43b000"
+      },
+      {
+        "path": "ort-wasm-simd-threaded.wasm",
+        "bytes": 14239897,
+        "sha256": "3398c10d07d229bd91b364548e130e0e51a8e5704b88c7c083ebbeb78842dee2"
+      },
+      {
+        "path": "ort-wasm-simd-threaded.mjs",
+        "bytes": 24381,
+        "sha256": "e13f7f94fc51b4ca72b12faeb1ee95f4ace6dfbc8939bc718aabdc0a27c4299b"
+      }
+    ]
   },
   {
     "device": "iphone-layout",
     "engine": "chromium 153.0.8010.0",
     "realPhone": false,
-    "initialMs": 6169.100000000093,
-    "readyMs": 5411,
+    "initialMs": 6027.299999999814,
+    "warmInitialMs": 3498.2000000001863,
+    "readyMs": 5260.799999999814,
     "continuousMs": [
-      764.6000000000931,
-      737,
-      720.2000000001863
+      720.5999999996275,
+      759.5999999996275,
+      768.2000000001863
     ],
     "whiteText": "しないでください\nジャスミンティー\n分解したりしないでください\nあなたの健康を大切に",
     "blackText": "ここをあけないでください\nコーヒー\n保管してください\nお子様の手の届かない所",
     "errors": [],
     "uploads": 0,
-    "requests": 13,
-    "objectEpochAfterBlack": 1
+    "requests": 24,
+    "objectEpochAfterBlack": 1,
+    "servedAssets": []
   }
 ]
