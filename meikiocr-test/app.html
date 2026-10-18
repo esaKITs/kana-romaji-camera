@@ -727,6 +727,12 @@ function flowLocate(target=video){
  let appearanceMismatch=false;
  if(referenceCanvas){
   const appearance=verifyRegistration(referenceCanvas,target,{m:[1,0,0,0,1,0,0,0,1],W:referenceCanvas.width,H:referenceCanvas.height});
+  // A separately verified stationary correspondence is stronger than a noisy
+  // optical-flow proposal during exposure recovery. This is pixel evidence,
+  // not a timeout or unconditional reuse of old coordinates.
+  if(appearance.status==='verified'&&appearance.reason==='exposure-adjusted'){
+   lastRegistrationStatus='verified';return {m:[1,0,0,0,1,0,0,0,1],W:referenceCanvas.width,H:referenceCanvas.height,refW:referenceCanvas.width,refH:referenceCanvas.height};
+  }
   if(appearance.status==='mismatch'&&appearance.reason==='appearance-change'){
    appearanceMismatch=true;lastRegistrationStatus='mismatch';
    if(!appearance.exposureCandidate)return null;
@@ -1535,7 +1541,7 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
 
  if(active&&myId===runId){const ruby=await detectRubyKanji(result.data,myId);items=items.concat(ruby)}
  if(!active||myId!==runId)return;
- progressStep('Positioning labels…');const motion=motionLevel(frameSignature),largeMotion=motion>23;const currentFrame=trackingFrame();const elapsedMotion=captureFrame&&currentFrame?blockMotion(captureFrame,currentFrame):null;const frameDifference=captureFrame&&currentFrame?captureFrame.reduce((v,x,i)=>v+Math.abs(x-currentFrame[i]),0)/captureFrame.length:0;const aligned=elapsedMotion?items.map(it=>({...it,box:moveBox(it.box,elapsedMotion)})):items;const captureValidation=motionRegistration(scanCapture,cameraSnapshot(),elapsedMotion);if(window.meikiMetrics)window.meikiMetrics.lastCapturePlacement={validation:captureValidation,motion:elapsedMotion,frameDifference,items:items.length};const canPlace=captureValidation.status==='verified';const stable=canPlace?aligned:[];
+ progressStep('Positioning labels…');const motion=motionLevel(frameSignature),largeMotion=motion>23;const currentFrame=trackingFrame();const elapsedMotion=captureFrame&&currentFrame?blockMotion(captureFrame,currentFrame):null;const frameDifference=captureFrame&&currentFrame?captureFrame.reduce((v,x,i)=>v+Math.abs(x-currentFrame[i]),0)/captureFrame.length:0;const placementTarget=cameraSnapshot();let placementMotion=elapsedMotion,captureValidation=motionRegistration(scanCapture,placementTarget,placementMotion);if(captureValidation.status!=='verified'){const stationary=motionRegistration(scanCapture,placementTarget,null);if(stationary.status==='verified'){placementMotion=null;captureValidation=stationary}}const aligned=placementMotion?items.map(it=>({...it,box:moveBox(it.box,placementMotion)})):items;if(window.meikiMetrics)window.meikiMetrics.lastCapturePlacement={validation:captureValidation,motion:placementMotion,frameDifference,items:items.length};const canPlace=captureValidation.status==='verified';const stable=canPlace?aligned:[];
  // Reproject protected regions from the previous verified frame before replacing it.
  // If tracking cannot establish correspondence, do not transplant labels to a new page.
  let oldProjected=[];
@@ -1553,7 +1559,7 @@ async function scan(){if(!active||stillMode||busy||stillBusy||!video.videoWidth)
   referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
   rememberRecognition(scanCapture,captureItems,'live-frame');
   flowReset();
-  tracks=elapsedMotion?captureItems.map(it=>({...it,box:moveBox(it.box,elapsedMotion)})):captureItems;
+  tracks=placementMotion?captureItems.map(it=>({...it,box:moveBox(it.box,placementMotion)})):captureItems;
   lastFrame=frameSignature;
   alignOverlay();
   paint(tracks);

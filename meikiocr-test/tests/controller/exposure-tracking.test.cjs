@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
-const {load,reading}=require('./harness.cjs');
+const {load,reading,data}=require('./harness.cjs');
 function pattern(h,seed=1){const c=h.makeCanvas(),q=c.getContext('2d');q.fillStyle='#b4b4b4';q.fillRect(0,0,640,360);q.fillStyle='#232323';let n=seed;const random=()=>{n=(Math.imul(n,1664525)+1013904223)>>>0;return n/4294967296};for(let i=0;i<210;i++)q.fillRect(20+random()*600,20+random()*320,5+random()*15,5+random()*13);return c;}
 function exposed(h,source,gain,offset,dx=0,dy=0){const c=h.makeCanvas(),q=c.getContext('2d');q.fillStyle='#b4b4b4';q.fillRect(0,0,640,360);q.drawImage(source,dx,dy);const image=q.getImageData(0,0,640,360);for(let i=0;i<image.data.length;i+=4)for(let j=0;j<3;j++)image.data[i+j]=Math.max(0,Math.min(255,image.data[i+j]*gain+offset));q.putImageData(image,0,0);return c;}
 function setup(){const h=load();h.run('active=true;work.width=640;work.height=360');return h;}
@@ -35,4 +35,14 @@ test('real printed-text fixture remains verifiable when dimmed samples have low 
  h.put('source',source);h.put('target',exposed(h,source,.5,0));
  const result=h.run('verifyRegistration(source,target,{m:[1,0,0,0,1,0,0,0,1],W:640,H:360})');
  assert.equal(result.status,'verified');assert.equal(result.reason,'exposure-adjusted');
+});
+test('verified stationary exposure takes precedence over an unreliable optical-flow proposal',()=>{
+ const h=setup(),base=pattern(h);h.put('source',exposed(h,base,.5,0));h.put('target',exposed(h,base,1,45));h.put('items',[reading()]);
+ h.run('referenceCanvas=source;referenceItems=items;flowPrepare=()=>{throw Error("must not replace verified stationary correspondence") }');
+ const transform=h.run('flowLocate(target)');assert.ok(transform);assert.equal(h.run('lastRegistrationStatus'),'verified');assert.deepEqual(Array.from(transform.m),[1,0,0,0,1,0,0,0,1]);
+});
+test('a bad block-motion estimate cannot discard an independently verified static OCR capture',async()=>{
+ const h=setup();h.put('source',pattern(h));h.put('workerMock',{meiki:true,setParameters:async()=>{},recognize:async()=>({data:data([reading()])})});
+ h.run('video.getContext("2d").drawImage(source,0,0);worker=workerMock;kleeUnavailable=true;blockMotion=()=>({A:1,B:0,tx:5,ty:0})');
+ await h.run('scan()');assert.equal(h.run('tracks.length'),1);assert.equal(h.run('tracks[0].box.x0'),100);assert.equal(h.run('objectEpoch'),0);
 });
