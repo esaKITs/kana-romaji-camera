@@ -1,6 +1,6 @@
 {
   "name": "Kana → Romaji Camera",
-  "short_name": "Kana Romaji",
+  "short_name": "Kana→Romaji",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#101820",
