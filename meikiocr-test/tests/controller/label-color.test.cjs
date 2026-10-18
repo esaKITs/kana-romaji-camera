@@ -37,3 +37,25 @@ test('a colored surrounding package cannot determine the white printed region co
  const h=setup();h.put('box',box);h.run('wc.fillStyle="#694b2c";wc.fillRect(0,0,640,360);wc.fillStyle="#deded5";wc.fillRect(100,100,200,30);wc.fillStyle="#252525";for(let x=105;x<295;x+=25)wc.fillRect(x,103,4,24)');
  near([...h.run('sampledPaperColor(box,work)')],[222,222,213]);
 });
+
+for(const [name,first,second] of [
+ ['black to white','#202322','#deded5'],
+ ['white to black','#deded5','#202322'],
+])test(name+' refreshes paper on a newly accepted OCR capture without requiring an epoch reset',()=>{
+ const h=setup();h.put('items',[reading('ください',90,box)]);h.put('first',first);h.put('second',second);
+ h.run('video.getContext("2d").fillStyle=first;video.getContext("2d").fillRect(0,0,640,360);paint(items);wc.drawImage(video,0,0);rememberRecognition(work,items,"live-frame")');
+ const epoch=h.run('objectEpoch');
+ h.run('video.getContext("2d").fillStyle=second;video.getContext("2d").fillRect(0,0,640,360);wc.drawImage(video,0,0);rememberRecognition(work,items,"live-frame");paint(items)');
+ assert.equal(h.run('objectEpoch'),epoch);near(pixel(h),second==='#deded5'?[222,222,213]:[32,35,34]);
+});
+test('accepted OCR retains unified paper under modest exposure changes and ignores surrounding package',()=>{
+ const h=setup();h.put('items',[reading('ください',90,box)]);
+ h.run('wc.fillStyle="#deded5";wc.fillRect(0,0,640,360);rememberRecognition(work,items,"live-frame")');
+ h.run('wc.fillStyle="black";wc.fillRect(0,0,640,360);wc.fillStyle="#c7c7ba";wc.fillRect(100,100,200,30);rememberRecognition(work,items,"live-frame")');
+ near([...h.run('documentLabelPalette.paper')],[222,222,213]);
+});
+test('empty recognition cannot overwrite the stored palette',()=>{
+ const h=setup();h.put('items',[reading('ください',90,box)]);
+ h.run('wc.fillStyle="#deded5";wc.fillRect(0,0,640,360);rememberRecognition(work,items,"live-frame");wc.fillStyle="black";wc.fillRect(0,0,640,360);rememberRecognition(work,[],"live-frame")');
+ near([...h.run('documentLabelPalette.paper')],[222,222,213]);
+});

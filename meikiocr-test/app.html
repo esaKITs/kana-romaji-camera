@@ -385,8 +385,10 @@ function sampledPaperColor(b,image=work){
 // One coherent label background per tracked document, not a new RGB value
 // for each label or each camera frame. A new objectEpoch invalidates it.
 let documentLabelPalette={epoch:-1,paper:null};
-function unifiedLabelPaper(accepted,image,scaleX,scaleY){
- if(documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.paper)return documentLabelPalette.paper;
+function unifiedLabelPaper(accepted,image,scaleX,scaleY,freshCapture=false){
+ const cached=documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.paper;
+ // Repaints stay stable; a newly accepted immutable OCR capture can refresh.
+ if(cached&&!freshCapture)return documentLabelPalette.paper;
  const samples=accepted.map(c=>{
   const b=c.source;
   const rgb=sampledPaperColor({x0:b.x0*scaleX,y0:b.y0*scaleY,x1:b.x1*scaleX,y1:b.y1*scaleY},image);
@@ -407,6 +409,9 @@ function unifiedLabelPaper(accepted,image,scaleX,scaleY){
  const sorted=[...winner.colors].sort((a,b)=>a.rgb.reduce((v,c)=>v+c,0)-b.rgb.reduce((v,c)=>v+c,0));
  let total=0;const half=winner.weight/2;let paper=sorted[0].rgb;
  for(const entry of sorted){total+=entry.weight;if(total>=half){paper=entry.rgb;break}}
+ // Ignore modest exposure changes; refresh large paper-tone changes from
+ // accepted text boxes, never surrounding packaging or an overlay frame.
+ if(cached&&Math.max(...paper.map((v,c)=>Math.abs(v-cached[c])))<70)return cached;
  documentLabelPalette={epoch:objectEpoch,paper:[...paper]};
  return documentLabelPalette.paper;
 }
@@ -981,7 +986,10 @@ function validRecognitionItem(it,image){
 function rememberRecognition(canvas,items,source){
  if(!canvas||!items.length)return;
  const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;copy.getContext('2d').drawImage(canvas,0,0);
- sharedRecognition={objectEpoch,canvas:copy,items:items.filter(it=>validRecognitionItem(it,copy)).slice(0,100).map(cloneRecognitionItem),source,capturedAt:performance.now(),signature:imageFingerprint(copy)};
+ const valid=items.filter(it=>validRecognitionItem(it,copy)).slice(0,100);
+ if(!valid.length)return;
+ unifiedLabelPaper(valid.map(it=>({source:it.box})),copy,1,1,true);
+ sharedRecognition={objectEpoch,canvas:copy,items:valid.map(cloneRecognitionItem),source,capturedAt:performance.now(),signature:imageFingerprint(copy)};
 }
 function identicalImage(a,b){
  // A coarse page fingerprint is NOT evidence of coordinate correspondence.
