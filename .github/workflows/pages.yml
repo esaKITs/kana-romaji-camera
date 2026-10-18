@@ -32,6 +32,8 @@ jobs:
         run: npm run build
       - name: Controller, palette and adapter regressions
         run: npm test
+      - name: OpenCV real movement, rotation and object-change regressions
+        run: OPENCV_JS=./public/vendor/opencv.js node scripts/opencv-test.cjs
       - name: Install browser test runtimes
         run: npx playwright install --with-deps chromium webkit
       - name: Chromium actual OCR camera-stream integration

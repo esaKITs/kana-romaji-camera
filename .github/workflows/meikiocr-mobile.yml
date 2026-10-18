@@ -23,6 +23,9 @@ jobs:
       - name: Controller and adapter regression tests
         working-directory: meikiocr-test
         run: npm test
+      - name: OpenCV real movement, rotation and object-change regressions
+        working-directory: meikiocr-test
+        run: OPENCV_JS=./public/vendor/opencv.js node scripts/opencv-test.cjs
       - name: Install browser test runtimes
         working-directory: meikiocr-test
         run: npx playwright install --with-deps chromium webkit

@@ -445,10 +445,54 @@ function romajiLayout(output,width,height,unit,fontCap=Infinity){
  return null;
 }
 
+// Presentation state is separate from OCR evidence and image registration.
+// Normalize by image width so a new analysis resolution cannot move a label.
+let liveDisplayState={epoch:-1,aspect:0,at:0,entries:[]};
+function clearLiveDisplay(){liveDisplayState={epoch:-1,aspect:0,at:0,entries:[]}}
+function stabilizeLiveDisplay(items,image){
+ if(stillMode||!active){clearLiveDisplay();return items}
+ const now=performance.now(),W=image.width,aspect=image.height/Math.max(1,W);
+ const previous=liveDisplayState;
+ const valid=previous.epoch===objectEpoch&&Math.abs(previous.aspect-aspect)<.001&&now-previous.at<400;
+ const dt=Math.max(.016,Math.min(.25,(now-previous.at)/1000)),cssW=Math.max(1,stage.getBoundingClientRect().width);
+ const used=new Set(),entries=[];
+ const result=items.map(item=>{
+  const b=item.displayBox||item.box;
+  const raw=[(b.x0+b.x1)/2/W,(b.y0+b.y1)/2/W,(b.x1-b.x0)/W,(b.y1-b.y0)/W];
+  let match=null,best=Infinity;
+  if(valid)for(const entry of previous.entries){
+   if(used.has(entry)||entry.text!==item.text||entry.ruby!==!!item.rubyKanji)continue;
+   const distance=Math.hypot(raw[0]-entry.raw[0],raw[1]-entry.raw[1]);
+   if(distance<Math.max(.04,raw[3]*2)&&distance<best){match=entry;best=distance}
+  }
+  let filtered=[...raw],velocity=[0,0];
+  if(match){
+   used.add(match);
+   const derivativeAlpha=1-Math.exp(-2*Math.PI*dt);
+   velocity=raw.slice(0,2).map((v,i)=>match.velocity[i]+derivativeAlpha*((v-match.raw[i])*cssW/dt-match.velocity[i]));
+   const jump=Math.hypot(raw[0]-match.raw[0],raw[1]-match.raw[1])*cssW;
+   const resized=Math.max(...raw.slice(2).map((v,i)=>Math.abs(v-match.raw[i+2])*cssW));
+   // Real movement/zoom must follow immediately; do not smooth a scene jump.
+   if(jump<Math.max(8,raw[3]*cssW*.6)&&resized<4){
+    const speed=Math.hypot(...velocity),alpha=1-Math.exp(-2*Math.PI*(1.25+.012*speed)*dt);
+    const sizeAlpha=1-Math.exp(-2*Math.PI*1.5*dt);
+    filtered=raw.map((v,i)=>match.filtered[i]+(i<2?alpha:sizeAlpha)*(v-match.filtered[i]));
+    // Bound any display lag to 4 CSS pixels and 20% of the text height.
+    const limit=Math.min(4,raw[3]*cssW*.2)/cssW;
+    for(let i=0;i<2;i++)filtered[i]=Math.max(raw[i]-limit,Math.min(raw[i]+limit,filtered[i]));
+   }
+  }
+  entries.push({text:item.text,ruby:!!item.rubyKanji,raw,filtered,velocity});
+  const [x,y,w,h]=filtered.map(v=>v*W);
+  return {...item,displayBox:{x0:Math.max(0,x-w/2),y0:Math.max(0,y-h/2),x1:Math.min(W,x+w/2),y1:Math.min(image.height,y+h/2)}};
+ });
+ liveDisplayState={epoch:objectEpoch,aspect,at:now,entries};return result;
+}
+
 function paint(items){
  if(items.length){hasShownLabels=true;if(!stillMode)progress.hidden=true}
- items=lineAligned(items);
  const image=stillMode&&stillSource?stillSource:work;
+ items=stabilizeLiveDisplay(lineAligned(items),image);
  overlay.width=image.width;overlay.height=image.height;
  ctx.clearRect(0,0,overlay.width,overlay.height);
  ctx.textBaseline='middle';
@@ -528,7 +572,20 @@ function updateTracks(items){const now=performance.now(),used=new Set();for(cons
 let trackingTimer=null,trackPrev=null,trackingRevision=0,trackingFailures=0;
 const trackCanvas=document.createElement('canvas');trackCanvas.width=160;trackCanvas.height=120;const trackCtx=trackCanvas.getContext('2d',{willReadFrequently:true});
 function trackingFrame(source=video){if(!active||!video.videoWidth)return null;trackCtx.drawImage(source,0,0,160,120);const rgba=trackCtx.getImageData(0,0,160,120).data,gray=new Uint8Array(160*120);for(let i=0;i<gray.length;i++)gray[i]=(.299*rgba[i*4]+.587*rgba[i*4+1]+.114*rgba[i*4+2])|0;return gray}
-function blockMotion(prev,cur){const pts=[];for(let y=20;y<=100;y+=20)for(let x=20;x<=140;x+=20){let mean=0,v=0;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)mean+=prev[(y+yy)*160+x+xx];mean/=25;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)v+=(prev[(y+yy)*160+x+xx]-mean)**2;if(v/25<110)continue;let best=Infinity,bx=0,by=0;for(let dy=-7;dy<=7;dy++)for(let dx=-7;dx<=7;dx++){let err=0;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)err+=Math.abs(prev[(y+yy)*160+x+xx]-cur[(y+yy+dy)*160+x+xx+dx]);if(err<best){best=err;bx=dx;by=dy}}if(best/25<33)pts.push({x,y,u:x+bx,v:y+by})}if(pts.length<4)return null;let best=null,count=0;for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const p=pts[i],q=pts[j],dx=q.x-p.x,dy=q.y-p.y,den=dx*dx+dy*dy;if(den<300)continue;const du=q.u-p.u,dv=q.v-p.v,A=(dx*du+dy*dv)/den,B=(dx*dv-dy*du)/den,tx=p.u-A*p.x+B*p.y,ty=p.v-B*p.x-A*p.y;if(Math.hypot(A,B)<.8||Math.hypot(A,B)>1.2)continue;const n=pts.filter(t=>Math.hypot(A*t.x-B*t.y+tx-t.u,B*t.x+A*t.y+ty-t.v)<2.5).length;if(n>count){count=n;best={A,B,tx,ty}}}return count>=Math.max(4,Math.ceil(pts.length*.55))?best:null}
+// Refit all agreeing correspondences instead of retaining a noisy two-point
+// hypothesis. The image verifier still decides whether this is the same page.
+function fitTrackedSimilarity(points){
+ if(points.length<3)return null;
+ const mean=key=>points.reduce((sum,p)=>sum+p[key],0)/points.length;
+ const x=mean('x'),y=mean('y'),u=mean('u'),v=mean('v');
+ let den=0,a=0,b=0;
+ for(const p of points){const dx=p.x-x,dy=p.y-y,du=p.u-u,dv=p.v-v;den+=dx*dx+dy*dy;a+=dx*du+dy*dv;b+=dx*dv-dy*du}
+ if(den<1)return null;
+ const A=a/den,B=b/den,tx=u-A*x+B*y,ty=v-B*x-A*y;
+ if(![A,B,tx,ty].every(Number.isFinite)||Math.hypot(A,B)<.8||Math.hypot(A,B)>1.2)return null;
+ return {A,B,tx,ty};
+}
+function blockMotion(prev,cur){const pts=[];for(let y=20;y<=100;y+=20)for(let x=20;x<=140;x+=20){let mean=0,v=0;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)mean+=prev[(y+yy)*160+x+xx];mean/=25;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)v+=(prev[(y+yy)*160+x+xx]-mean)**2;if(v/25<110)continue;let best=Infinity,bx=0,by=0;for(let dy=-7;dy<=7;dy++)for(let dx=-7;dx<=7;dx++){let err=0;for(let yy=-4;yy<=4;yy+=2)for(let xx=-4;xx<=4;xx+=2)err+=Math.abs(prev[(y+yy)*160+x+xx]-cur[(y+yy+dy)*160+x+xx+dx]);if(err<best){best=err;bx=dx;by=dy}}if(best/25<33)pts.push({x,y,u:x+bx,v:y+by})}if(pts.length<4)return null;let best=null,count=0;for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const p=pts[i],q=pts[j],dx=q.x-p.x,dy=q.y-p.y,den=dx*dx+dy*dy;if(den<300)continue;const du=q.u-p.u,dv=q.v-p.v,A=(dx*du+dy*dv)/den,B=(dx*dv-dy*du)/den,tx=p.u-A*p.x+B*p.y,ty=p.v-B*p.x-A*p.y;if(Math.hypot(A,B)<.8||Math.hypot(A,B)>1.2)continue;const n=pts.filter(t=>Math.hypot(A*t.x-B*t.y+tx-t.u,B*t.x+A*t.y+ty-t.v)<2.5).length;if(n>count){count=n;best={A,B,tx,ty}}}if(count<Math.max(4,Math.ceil(pts.length*.55)))return null;for(let pass=0;pass<2;pass++){const agreeing=pts.filter(t=>Math.hypot(best.A*t.x-best.B*t.y+best.tx-t.u,best.B*t.x+best.A*t.y+best.ty-t.v)<2.5);best=fitTrackedSimilarity(agreeing)||best}return best}
 function moveBox(b,m){const sx=work.width/160,sy=work.height/120,pts=[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]].map(([x,y])=>{const u=x/sx,v=y/sy;return [(m.A*u-m.B*v+m.tx)*sx,(m.B*u+m.A*v+m.ty)*sy]});return {x0:Math.min(...pts.map(p=>p[0])),y0:Math.min(...pts.map(p=>p[1])),x1:Math.max(...pts.map(p=>p[0])),y1:Math.max(...pts.map(p=>p[1]))}}
 // MIT-licensed feature matcher tracks the scanned page as one plane.
 let featureReady=false,featureFailure='',referenceCanvas=null,referenceItems=[],featureBusy=false;
@@ -615,7 +672,7 @@ function motionRegistration(source,target,motion){
  return verifyRegistration(source,target,{m:[m.A,-m.B,m.tx,m.B,m.A,m.ty,0,0,1],W,H});
 }
 function resetObjectState(){
- objectEpoch++;runId++;cancelPendingFreeze();clearFocus();$('recognized').textContent='';
+ clearLiveDisplay();objectEpoch++;runId++;cancelPendingFreeze();clearFocus();$('recognized').textContent='';
  sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};
  protectedKana=[];kanaHistory=[];historyLastVerified=0;referenceCanvas=null;referenceItems=[];tracks=[];previousItems=[];lastFrame=null;
  flowReset();ctx.clearRect(0,0,overlay.width,overlay.height);
@@ -658,6 +715,14 @@ function flowLocate(target=video){
   if(m.some(v=>!Number.isFinite(v)))return null;
   const center=m[6]*W/2+m[7]*H/2+m[8];
   if(Math.abs(center)<.15)return null;
+  const agreeing=[];
+  for(let i=0;i<mask.data.length;i++)if(mask.data[i])agreeing.push({x:goodA[i*2],y:goodA[i*2+1],u:goodB[i*2],v:goodB[i*2+1]});
+  const similarity=fitTrackedSimilarity(agreeing);
+  if(similarity){
+   const {A,B,tx,ty}=similarity;
+   const stable={m:[A,-B,tx,B,A,ty,0,0,1],W,H,refW:referenceCanvas.width,refH:referenceCanvas.height};
+   if(verifyRegistration(referenceCanvas,target,stable).status==='verified'){lastRegistrationStatus='verified';return stable}
+  }
   const transform={m,W,H,refW:referenceCanvas.width,refH:referenceCanvas.height};
   const validation=verifyRegistration(referenceCanvas,target,transform);lastRegistrationStatus=validation.status;
   return validation.status==='verified'?transform:null;
@@ -710,7 +775,7 @@ async function trackTick(){
  if(active)trackingTimer=setTimeout(trackTick,65);
 }
 function displayItemsPresent(){return tracks.length>0}
-function resetTracking(){flowReset();if(trackingTimer!==null)clearTimeout(trackingTimer);trackingTimer=null;trackPrev=null;trackingRevision++;trackingFailures=0}
+function resetTracking(){clearLiveDisplay();flowReset();if(trackingTimer!==null)clearTimeout(trackingTimer);trackingTimer=null;trackPrev=null;trackingRevision++;trackingFailures=0}
 function resumeTracking(){resetTracking();if(active&&!stillMode)trackTick()}
 const enhanced=document.createElement('canvas'),ec=enhanced.getContext('2d',{willReadFrequently:true});
 function averageBrightness(){const w=work.width,h=work.height;const d=wc.getImageData(0,0,w,h).data;let sum=0,n=0;for(let y=0;y<h;y+=12)for(let x=0;x<w;x+=12){let k=(y*w+x)*4;sum+=.2126*d[k]+.7152*d[k+1]+.0722*d[k+2];n++}return sum/Math.max(n,1)}
