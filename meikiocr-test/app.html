@@ -388,7 +388,7 @@ function extract(data,image=work){
    }
    groups.push({text:part.text,box:{...part.box},lastWord:part.word,confidence:part.confidence,joinGroup:part.joinGroup,kanaGlyphs:part.kanaGlyphs||null})
   }
-  for(const g of groups){const len=[...g.text].length,conf=g.confidence||0;if((len===1&&conf<65)||(len===2&&conf<38))continue;out.push({text:dictionaryCandidate(g.text),box:g.box,angle:0,confidence:conf,joinGroup:g.joinGroup,kanaGlyphs:g.kanaGlyphs})}
+  for(const g of groups){const len=[...g.text].length,conf=g.confidence||0;if((len===1&&conf<65)||(len===2&&conf<38))continue;out.push({text:dictionaryCandidate(g.text),box:g.box,angle:0,confidence:conf,joinGroup:g.joinGroup,kanaGlyphs:g.kanaGlyphs?.map(z=>({text:z.text,x0:(z.box.x0-g.box.x0)/(g.box.x1-g.box.x0),x1:(z.box.x1-g.box.x0)/(g.box.x1-g.box.x0),y0:(z.box.y0-g.box.y0)/(g.box.y1-g.box.y0),y1:(z.box.y1-g.box.y0)/(g.box.y1-g.box.y0)}))})}
  }
  return out.filter(p=>{const b=p.box,w=b.x1-b.x0,h=b.y1-b.y0;return h>=8&&w>=5&&w/h>.18&&w/h<24&&p.box.x0>=0&&p.box.y0>=0&&p.box.x1<=image.width&&p.box.y1<=image.height&&p.box.x1-p.box.x0>=3})
 }
@@ -647,13 +647,13 @@ function katakanaDisplayItems(items){
   if(/^[ァ-ヺー・\\s]+$/.test(item.text)){result.push(item);continue}
   const glyphs=item.kanaGlyphs;
   if(!glyphs?.length||glyphs.map(g=>g.text).join('')!==item.text)continue;
-  const parent=item.box,display=item.displayBox||parent,pw=parent.x1-parent.x0,ph=parent.y1-parent.y0;
-  if(pw<=0||ph<=0)continue;
+  const display=item.displayBox||item.box;
+  if(display.x1<=display.x0||display.y1<=display.y0)continue;
   let run=[];
   const flush=()=>{
    if(!run.length)return;
-   const b={x0:Math.min(...run.map(g=>g.box.x0)),y0:Math.min(...run.map(g=>g.box.y0)),x1:Math.max(...run.map(g=>g.box.x1)),y1:Math.max(...run.map(g=>g.box.y1))};
-   const mapBox={x0:display.x0+(b.x0-parent.x0)*(display.x1-display.x0)/pw,y0:display.y0+(b.y0-parent.y0)*(display.y1-display.y0)/ph,x1:display.x0+(b.x1-parent.x0)*(display.x1-display.x0)/pw,y1:display.y0+(b.y1-parent.y0)*(display.y1-display.y0)/ph};
+   const b={x0:Math.min(...run.map(g=>g.x0)),y0:Math.min(...run.map(g=>g.y0)),x1:Math.max(...run.map(g=>g.x1)),y1:Math.max(...run.map(g=>g.y1))};
+   const mapBox={x0:display.x0+b.x0*(display.x1-display.x0),y0:display.y0+b.y0*(display.y1-display.y0),x1:display.x0+b.x1*(display.x1-display.x0),y1:display.y0+b.y1*(display.y1-display.y0)};
    const text=run.map(g=>g.text).join('');
    if(mapBox.x1>mapBox.x0&&mapBox.y1>mapBox.y0)result.push({...item,text,box:mapBox,displayBox:mapBox,joinGroup:null,kanaGlyphs:null});
    run=[];
