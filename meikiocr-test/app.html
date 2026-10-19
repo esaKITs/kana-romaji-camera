@@ -533,38 +533,52 @@ function sampledPaperColor(b,image=work){
  }
  return [0,1,2].map(c=>Math.round(paper.reduce((sum,rgb)=>sum+rgb[c],0)/Math.max(1,paper.length)));
 }
-// One coherent label background per tracked document, not a new RGB value
-// for each label or each camera frame. A new objectEpoch invalidates it.
-let documentLabelPalette={epoch:-1,paper:null};
+// At most three stable paper tones per document. Preserve white separately
+// from pink/orange; exposure differences within one family share a tone.
+let documentLabelPalette={epoch:-1,papers:null};
+function paperFamily(rgb){
+ const [r,g,b]=rgb,spread=Math.max(r,g,b)-Math.min(r,g,b);
+ if(Math.min(r,g,b)>=208&&spread<=30)return 'white';
+ if(r>g*1.07&&r>b*1.12&&r-g>=18)return 'warm';
+ return 'other';
+}
+function paperDistance(a,b){return Math.sqrt(a.reduce((sum,v,i)=>sum+(v-b[i])**2,0))}
 function unifiedLabelPaper(accepted,image,scaleX,scaleY,freshCapture=false){
- const cached=documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.paper;
- // Repaints stay stable; a newly accepted immutable OCR capture can refresh.
- if(cached&&!freshCapture)return documentLabelPalette.paper;
+ const cached=documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.papers;
+ if(cached&&!freshCapture)return cached;
  const samples=accepted.map(c=>{
   const b=c.source;
   const rgb=sampledPaperColor({x0:b.x0*scaleX,y0:b.y0*scaleY,x1:b.x1*scaleX,y1:b.y1*scaleY},image);
-  const area=Math.max(1,(b.x1-b.x0)*(b.y1-b.y0));
-  return {rgb,weight:Math.min(5,Math.max(1,Math.sqrt(area)/30))};
+  return {rgb,family:paperFamily(rgb),weight:Math.min(5,Math.max(1,Math.sqrt(Math.max(1,(b.x1-b.x0)*(b.y1-b.y0)))/30))};
  });
- if(!samples.length)return [245,245,245];
- // Select the prevailing paper tone, rather than averaging dark packaging
- // with white ink, glare, or isolated brightly colored labels.
- const groups=new Map();
+ if(!samples.length)return cached||[[245,245,245]];
+ const groups=[];
  for(const sample of samples){
-  const light=sample.rgb.reduce((v,c,i)=>v+c*[.299,.587,.114][i],0);
-  const key=light<85?'dark':light>185?'light':'middle';
-  const group=groups.get(key)||{weight:0,colors:[]};
-  group.weight+=sample.weight;group.colors.push(sample);groups.set(key,group);
+  let match=groups.find(g=>g.family===sample.family&&(sample.family!=='other'||paperDistance(g.rgb,sample.rgb)<58));
+  if(!match){match={family:sample.family,rgb:[...sample.rgb],weight:0};groups.push(match)}
+  const weight=match.weight+sample.weight;
+  match.rgb=match.rgb.map((v,i)=>(v*match.weight+sample.rgb[i]*sample.weight)/weight);
+  match.weight=weight;
  }
- const winner=[...groups.values()].sort((a,b)=>b.weight-a.weight)[0];
- const sorted=[...winner.colors].sort((a,b)=>a.rgb.reduce((v,c)=>v+c,0)-b.rgb.reduce((v,c)=>v+c,0));
- let total=0;const half=winner.weight/2;let paper=sorted[0].rgb;
- for(const entry of sorted){total+=entry.weight;if(total>=half){paper=entry.rgb;break}}
- // Ignore modest exposure changes; refresh large paper-tone changes from
- // accepted text boxes, never surrounding packaging or an overlay frame.
- if(cached&&Math.max(...paper.map((v,c)=>Math.abs(v-cached[c])))<70)return cached;
- documentLabelPalette={epoch:objectEpoch,paper:[...paper]};
- return documentLabelPalette.paper;
+ // A white and a warm paper group are protected from being displaced by
+ // two shades of pink; the remaining slot is the strongest distinct color.
+ const ranked=groups.sort((a,b)=>b.weight-a.weight);
+ const selected=[];
+ for(const family of ['white','warm']){
+  const match=ranked.find(g=>g.family===family);
+  if(match)selected.push(match);
+ }
+ for(const group of ranked)if(selected.length<3&&!selected.includes(group))selected.push(group);
+ const papers=selected.map(g=>g.rgb.map(Math.round));
+ if(cached&&cached.length===papers.length&&papers.every((p,i)=>paperDistance(p,cached[i])<35))return cached;
+ documentLabelPalette={epoch:objectEpoch,papers};
+ return papers;
+}
+function labelPaperFor(rgb,palette){
+ const family=paperFamily(rgb);
+ const matching=palette.filter(p=>paperFamily(p)===family);
+ const choices=matching.length?matching:palette;
+ return choices.reduce((best,p)=>paperDistance(rgb,p)<paperDistance(rgb,best)?p:best,choices[0]);
 }
 const labelColorImage=document.createElement('canvas');
 function currentLabelImage(image){
@@ -740,7 +754,7 @@ function paint(items){
  for(const c of accepted){
   ctx.save();ctx.translate(c.x,c.y);
   ctx.font='700 '+c.font+'px system-ui';
-  const paper=unifiedPaper;ctx.fillStyle='rgb('+paper.join(',')+')';
+  const localPaper=sampledPaperColor({x0:c.source.x0*colorScaleX,y0:c.source.y0*colorScaleY,x1:c.source.x1*colorScaleX,y1:c.source.y1*colorScaleY},colorImage);const paper=labelPaperFor(localPaper,unifiedPaper);ctx.fillStyle='rgb('+paper.join(',')+')';
   ctx.fillRect(-c.bandW/2,-c.bandH/2,c.bandW,c.bandH);
   const brightness=(paper[0]*.299+paper[1]*.587+paper[2]*.114);ctx.fillStyle=brightness>145?'#15212a':'#ffffff';ctx.textAlign='center';
   c.lines.forEach((line,i)=>ctx.fillText(line,0,(i-(c.lines.length-1)/2)*c.font*1.05));
@@ -1759,8 +1773,8 @@ document.addEventListener?.('visibilitychange',()=>{
  resumeTracking();
  if(!busy&&!stillBusy)setTimeout(scan,0);
 });
-$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');const ocrWarmup=ensureLiveWorker();stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();configureTorch();updateCameraViewport();hasShownLabels=false;documentLabelPalette={epoch:-1,paper:null};protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
-$('stop').onclick=()=>{lastRecognitionDetails=null;if(stillMode)exitStill();resetZoom();active=false;resetTorch();updateCameraInteraction();runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};documentLabelPalette={epoch:-1,paper:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
+$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');const ocrWarmup=ensureLiveWorker();stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();configureTorch();updateCameraViewport();hasShownLabels=false;documentLabelPalette={epoch:-1,papers:null};protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
+$('stop').onclick=()=>{lastRecognitionDetails=null;if(stillMode)exitStill();resetZoom();active=false;resetTorch();updateCameraInteraction();runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};documentLabelPalette={epoch:-1,papers:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
 function focusImagePoint(clientX,clientY){
  // The video, Still frame and OCR overlay are all rendered with object-fit:cover.
