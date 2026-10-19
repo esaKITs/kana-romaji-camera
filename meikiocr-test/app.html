@@ -538,11 +538,8 @@ function sampledPaperColor(b,image=work){
 let documentLabelPalette={epoch:-1,papers:null};
 function paperFamily(rgb){
  const [r,g,b]=rgb,spread=Math.max(r,g,b)-Math.min(r,g,b);
- // Classify pink/orange BEFORE white: pale pink (e.g. 255,229,234)
- // must never be merged into the white paper family.
- if(r-g>=9&&r-b>=10&&r>=g&&r>=b)return 'warm';
- // White/off-white/light grey are one family, without separating exposure.
- if(Math.min(r,g,b)>=190&&spread<=16)return 'white';
+ if(Math.min(r,g,b)>=208&&spread<=30)return 'white';
+ if(r>g*1.07&&r>b*1.12&&r-g>=18)return 'warm';
  return 'other';
 }
 function paperDistance(a,b){return Math.sqrt(a.reduce((sum,v,i)=>sum+(v-b[i])**2,0))}
