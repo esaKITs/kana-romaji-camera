@@ -58,5 +58,5 @@ test('an empty palette capture does not replace an existing palette',()=>{
  const h=setup();
  h.run('documentLabelPalette={epoch:objectEpoch,papers:[[245,245,245],[255,229,234]]}');
  const result=h.run('unifiedLabelPaper([],work,1,1,true)');
- assert.deepEqual(Array.from(result),[[245,245,245],[255,229,234]]);
+ assert.deepEqual(JSON.parse(JSON.stringify(result)),[[245,245,245],[255,229,234]]);
 });
