@@ -430,7 +430,7 @@ async function detectRubyKanji(data,myId){
    if(kana.test(candidate)&&candidate===nearby[0].text)reading=candidate;
   }catch(e){console.warn('Ruby OCR retry:',e)}
   finally{await worker.setParameters({tessedit_pageseg_mode:'11'})}
-  if(reading&&active&&myId===runId)found.push({text:reading,box:{...b},confidence:nearby[0].confidence||50,rubyKanji:true});
+  if(reading&&active&&myId===runId)found.push({text:reading,box:{...b},rubyBox:{...q},confidence:nearby[0].confidence||50,rubyKanji:true});
  }
  return found;
 }
@@ -533,38 +533,52 @@ function sampledPaperColor(b,image=work){
  }
  return [0,1,2].map(c=>Math.round(paper.reduce((sum,rgb)=>sum+rgb[c],0)/Math.max(1,paper.length)));
 }
-// One coherent label background per tracked document, not a new RGB value
-// for each label or each camera frame. A new objectEpoch invalidates it.
-let documentLabelPalette={epoch:-1,paper:null};
+// At most three stable paper tones per document. Preserve white separately
+// from pink/orange; exposure differences within one family share a tone.
+let documentLabelPalette={epoch:-1,papers:null};
+function paperFamily(rgb){
+ const [r,g,b]=rgb,spread=Math.max(r,g,b)-Math.min(r,g,b);
+ if(Math.min(r,g,b)>=208&&spread<=30)return 'white';
+ if(r>g*1.07&&r>b*1.12&&r-g>=18)return 'warm';
+ return 'other';
+}
+function paperDistance(a,b){return Math.sqrt(a.reduce((sum,v,i)=>sum+(v-b[i])**2,0))}
 function unifiedLabelPaper(accepted,image,scaleX,scaleY,freshCapture=false){
- const cached=documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.paper;
- // Repaints stay stable; a newly accepted immutable OCR capture can refresh.
- if(cached&&!freshCapture)return documentLabelPalette.paper;
+ const cached=documentLabelPalette.epoch===objectEpoch&&documentLabelPalette.papers;
+ if(cached&&!freshCapture)return cached;
  const samples=accepted.map(c=>{
   const b=c.source;
   const rgb=sampledPaperColor({x0:b.x0*scaleX,y0:b.y0*scaleY,x1:b.x1*scaleX,y1:b.y1*scaleY},image);
-  const area=Math.max(1,(b.x1-b.x0)*(b.y1-b.y0));
-  return {rgb,weight:Math.min(5,Math.max(1,Math.sqrt(area)/30))};
+  return {rgb,family:paperFamily(rgb),weight:Math.min(5,Math.max(1,Math.sqrt(Math.max(1,(b.x1-b.x0)*(b.y1-b.y0)))/30))};
  });
- if(!samples.length)return [245,245,245];
- // Select the prevailing paper tone, rather than averaging dark packaging
- // with white ink, glare, or isolated brightly colored labels.
- const groups=new Map();
+ if(!samples.length)return cached||[[245,245,245]];
+ const groups=[];
  for(const sample of samples){
-  const light=sample.rgb.reduce((v,c,i)=>v+c*[.299,.587,.114][i],0);
-  const key=light<85?'dark':light>185?'light':'middle';
-  const group=groups.get(key)||{weight:0,colors:[]};
-  group.weight+=sample.weight;group.colors.push(sample);groups.set(key,group);
+  let match=groups.find(g=>g.family===sample.family&&(sample.family!=='other'||paperDistance(g.rgb,sample.rgb)<58));
+  if(!match){match={family:sample.family,rgb:[...sample.rgb],weight:0};groups.push(match)}
+  const weight=match.weight+sample.weight;
+  match.rgb=match.rgb.map((v,i)=>(v*match.weight+sample.rgb[i]*sample.weight)/weight);
+  match.weight=weight;
  }
- const winner=[...groups.values()].sort((a,b)=>b.weight-a.weight)[0];
- const sorted=[...winner.colors].sort((a,b)=>a.rgb.reduce((v,c)=>v+c,0)-b.rgb.reduce((v,c)=>v+c,0));
- let total=0;const half=winner.weight/2;let paper=sorted[0].rgb;
- for(const entry of sorted){total+=entry.weight;if(total>=half){paper=entry.rgb;break}}
- // Ignore modest exposure changes; refresh large paper-tone changes from
- // accepted text boxes, never surrounding packaging or an overlay frame.
- if(cached&&Math.max(...paper.map((v,c)=>Math.abs(v-cached[c])))<70)return cached;
- documentLabelPalette={epoch:objectEpoch,paper:[...paper]};
- return documentLabelPalette.paper;
+ // A white and a warm paper group are protected from being displaced by
+ // two shades of pink; the remaining slot is the strongest distinct color.
+ const ranked=groups.sort((a,b)=>b.weight-a.weight);
+ const selected=[];
+ for(const family of ['white','warm']){
+  const match=ranked.find(g=>g.family===family);
+  if(match)selected.push(match);
+ }
+ for(const group of ranked)if(selected.length<3&&!selected.includes(group))selected.push(group);
+ const papers=selected.map(g=>g.rgb.map(Math.round));
+ if(cached&&cached.length===papers.length&&papers.every((p,i)=>paperDistance(p,cached[i])<35))return cached;
+ documentLabelPalette={epoch:objectEpoch,papers};
+ return papers;
+}
+function labelPaperFor(rgb,palette){
+ const family=paperFamily(rgb);
+ const matching=palette.filter(p=>paperFamily(p)===family);
+ const choices=matching.length?matching:palette;
+ return choices.reduce((best,p)=>paperDistance(rgb,p)<paperDistance(rgb,best)?p:best,choices[0]);
 }
 const labelColorImage=document.createElement('canvas');
 function currentLabelImage(image){
@@ -640,6 +654,22 @@ function stabilizeLiveDisplay(items,image){
  liveDisplayState={epoch:objectEpoch,aspect,at:now,entries};return result;
 }
 
+// Keep one label per verified ruby/kanji pair. Ruby glyphs supply the reading,
+// while the kanji box is the sole output position.
+function suppressRubyDuplicates(items){
+ const rubies=items.filter(it=>it.rubyKanji&&it.rubyBox&&it.box);
+ if(!rubies.length)return items;
+ const intersection=(a,b)=>Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0))*Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0));
+ const area=b=>Math.max(1,(b.x1-b.x0)*(b.y1-b.y0));
+ return items.filter(it=>{
+  if(it.rubyKanji)return true;
+  const box=it.box;
+  if(!box||!/^[ぁ-ゖー]+$/.test(it.text))return true;
+  // OCR may split a verified ruby into several kana runs. Suppress only
+  // kana wholly inside its verified ruby box, not neighboring body text.
+  return !rubies.some(r=>intersection(box,r.rubyBox)/area(box)>=.75&&area(box)<=area(r.rubyBox)*1.15);
+ });
+}
 // Filter display labels using actual OCR glyph geometry, not inferred character widths.
 function katakanaDisplayItems(items){
  const result=[];
@@ -667,7 +697,7 @@ function katakanaDisplayItems(items){
 function paint(items){
  if(items.length){hasShownLabels=true;if(!stillMode)progress.hidden=true}
  const image=stillMode&&stillSource?stillSource:work;
- items=stabilizeLiveDisplay(lineAligned(items),image);
+ items=suppressRubyDuplicates(stabilizeLiveDisplay(lineAligned(items),image));
   if(kanaMode==='katakana')items=katakanaDisplayItems(items);
  overlay.width=image.width;overlay.height=image.height;
  ctx.clearRect(0,0,overlay.width,overlay.height);
@@ -724,7 +754,7 @@ function paint(items){
  for(const c of accepted){
   ctx.save();ctx.translate(c.x,c.y);
   ctx.font='700 '+c.font+'px system-ui';
-  const paper=unifiedPaper;ctx.fillStyle='rgb('+paper.join(',')+')';
+  const localPaper=sampledPaperColor({x0:c.source.x0*colorScaleX,y0:c.source.y0*colorScaleY,x1:c.source.x1*colorScaleX,y1:c.source.y1*colorScaleY},colorImage);const paper=labelPaperFor(localPaper,unifiedPaper);ctx.fillStyle='rgb('+paper.join(',')+')';
   ctx.fillRect(-c.bandW/2,-c.bandH/2,c.bandW,c.bandH);
   const brightness=(paper[0]*.299+paper[1]*.587+paper[2]*.114);ctx.fillStyle=brightness>145?'#15212a':'#ffffff';ctx.textAlign='center';
   c.lines.forEach((line,i)=>ctx.fillText(line,0,(i-(c.lines.length-1)/2)*c.font*1.05));
@@ -978,7 +1008,7 @@ async function trackTick(){
     if(located)lastRegistrationStatus='verified';
    }
    if(located){
-    const moved=referenceItems.map(it=>({...it,box:flowWarpBox(it.box,located)})).filter(it=>it.box);
+    const moved=referenceItems.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,located),rubyBox:it.rubyBox?flowWarpBox(it.rubyBox,located):undefined})).filter(it=>it.box&&(!it.rubyKanji||it.rubyBox));
     if(moved.length){tracks=moved;paint(moved);flowFailures=0;flowLastSuccess=performance.now()}
    }else if(lastRegistrationStatus==='mismatch'){resetObjectState()}else{flowFailures++; if(flowFailures>=2){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height);}}
   }catch(e){featureFailure=String(e.message||e);flowFailures++;if(flowFailures>=2){tracks=[];ctx.clearRect(0,0,overlay.width,overlay.height)}}
@@ -1317,7 +1347,7 @@ function imageMatches(a,b){
  return diff/a.length<14;
 }
 function cloneRecognitionItem(it){
- return {...it,box:{...it.box},observedGroups:it.observedGroups?[...it.observedGroups]:undefined,support:it.support?Object.fromEntries(Object.entries(it.support).map(([key,v])=>[key,{...v,groups:[...v.groups]}])):undefined};
+ return {...it,box:{...it.box},rubyBox:it.rubyBox?{...it.rubyBox}:undefined,observedGroups:it.observedGroups?[...it.observedGroups]:undefined,support:it.support?Object.fromEntries(Object.entries(it.support).map(([key,v])=>[key,{...v,groups:[...v.groups]}])):undefined};
 }
 function validRecognitionItem(it,image){
  const b=it.box;
@@ -1351,8 +1381,8 @@ function projectRecognition(previous,target){
   if(!transform)return [];
   const validation=verifyRegistration(previous.canvas,target,transform);lastRegistrationStatus=validation.status;
   if(validation.status!=='verified')return [];
-  return previous.items.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,transform,target)}))
-   .filter(it=>validRecognitionItem(it,target));
+  return previous.items.map(it=>({...cloneRecognitionItem(it),box:flowWarpBox(it.box,transform,target),rubyBox:it.rubyBox?flowWarpBox(it.rubyBox,transform,target):undefined}))
+   .filter(it=>validRecognitionItem(it,target)&&(!it.rubyKanji||it.rubyBox));
  }catch(e){console.warn('Recognition registration unavailable:',e);return []}
  finally{({referenceCanvas,referenceItems,flowCache,flowVersion}=saved)}
 }
@@ -1385,7 +1415,7 @@ function evidenceMerge(old,candidate,group){
  // A tentative first reading can improve on the SAME frozen image, but
  // repeated variants must never pretend to be independent confirmations.
  const tentativeImprovement=name!==old.text&&old.state!=='confirmed'&&!old.focused&&oldEvidence===1&&record.confidence>=existing.confidence+15;
- const chosen=switchAllowed||tentativeImprovement?{...candidate}:old.text===name?{...old,box:{...candidate.box},confidence:record.confidence}:old;
+ const chosen=switchAllowed||tentativeImprovement?{...candidate}:old.text===name?{...old,box:{...candidate.box},rubyBox:candidate.rubyBox?{...candidate.rubyBox}:old.rubyBox?{...old.rubyBox}:undefined,confidence:record.confidence}:old;
  const winner=support[chosen.text],votes=winner.groups.length;
  const required=kanaThreshold({...chosen,confidence:winner.confidence});
  const bounded=Object.fromEntries(Object.entries(support).sort(([a,x],[b,y])=>(b===chosen.text)-(a===chosen.text)||y.groups.length-x.groups.length||y.confidence-x.confidence).slice(0,5));
@@ -1394,8 +1424,8 @@ function evidenceMerge(old,candidate,group){
 function stillMerge(items,newItems,group='still-frame',notify=true){
  let updates=0;
  for(const candidate of newItems){
-  if(!candidate.box||!kanaOnly.test(candidate.text)||(candidate.confidence??0)<24)continue;
-  const matches=items.filter(it=>sameKanaRegion(it,candidate));
+  if(!candidate.box||!kanaOnly.test(candidate.text)||(candidate.confidence??0)<24||(candidate.rubyKanji&&!candidate.rubyBox))continue;
+  const matches=items.filter(it=>!!it.rubyKanji===!!candidate.rubyKanji&&sameKanaRegion(it,candidate));
   if(!matches.length){
    items.push({...cloneRecognitionItem(candidate),support:{[candidate.text]:{text:candidate.text,groups:[group],confidence:candidate.confidence??50}},source:group,state:'provisional',votes:1});updates++;continue;
   }
@@ -1694,9 +1724,9 @@ async function scan(){if(document.hidden||!active||stillMode||busy||stillBusy||!
 
  }
 
- if(active&&myId===runId){const ruby=await detectRubyKanji(result.data,myId);items=items.concat(ruby)}
+ if(active&&myId===runId){const ruby=await detectRubyKanji(result.data,myId);items=suppressRubyDuplicates(items.concat(ruby))}
  if(!active||myId!==runId)return;
- progressStep('Positioning labels…');const motion=motionLevel(frameSignature),largeMotion=motion>23;const currentFrame=trackingFrame();const elapsedMotion=captureFrame&&currentFrame?blockMotion(captureFrame,currentFrame):null;const frameDifference=captureFrame&&currentFrame?captureFrame.reduce((v,x,i)=>v+Math.abs(x-currentFrame[i]),0)/captureFrame.length:0;const placementTarget=cameraSnapshot();let placementMotion=elapsedMotion,captureValidation=motionRegistration(scanCapture,placementTarget,placementMotion);if(captureValidation.status!=='verified'){const stationary=motionRegistration(scanCapture,placementTarget,null);if(stationary.status==='verified'){placementMotion=null;captureValidation=stationary}}const aligned=placementMotion?items.map(it=>({...it,box:moveBox(it.box,placementMotion)})):items;if(window.meikiMetrics)window.meikiMetrics.lastCapturePlacement={validation:captureValidation,motion:placementMotion,frameDifference,items:items.length};const canPlace=captureValidation.status==='verified';const stable=canPlace?aligned:[];
+ progressStep('Positioning labels…');const motion=motionLevel(frameSignature),largeMotion=motion>23;const currentFrame=trackingFrame();const elapsedMotion=captureFrame&&currentFrame?blockMotion(captureFrame,currentFrame):null;const frameDifference=captureFrame&&currentFrame?captureFrame.reduce((v,x,i)=>v+Math.abs(x-currentFrame[i]),0)/captureFrame.length:0;const placementTarget=cameraSnapshot();let placementMotion=elapsedMotion,captureValidation=motionRegistration(scanCapture,placementTarget,placementMotion);if(captureValidation.status!=='verified'){const stationary=motionRegistration(scanCapture,placementTarget,null);if(stationary.status==='verified'){placementMotion=null;captureValidation=stationary}}const aligned=placementMotion?items.map(it=>({...it,box:moveBox(it.box,placementMotion),rubyBox:it.rubyBox?moveBox(it.rubyBox,placementMotion):undefined})):items;if(window.meikiMetrics)window.meikiMetrics.lastCapturePlacement={validation:captureValidation,motion:placementMotion,frameDifference,items:items.length};const canPlace=captureValidation.status==='verified';const stable=canPlace?aligned:[];
  // Reproject protected regions from the previous verified frame before replacing it.
  // If tracking cannot establish correspondence, do not transplant labels to a new page.
  let oldProjected=[];
@@ -1709,12 +1739,13 @@ async function scan(){if(document.hidden||!active||stillMode||busy||stillBusy||!
  // Preserve the last verified reference on transient OCR or tracking failure.
  // Never attach history to a different page without a verified image transform.
  if((items.length||oldProjected.length)&&canPlace){
-  const captureItems=protectRecognized(items,oldProjected,evidenceGroup);
+  const captureItems=suppressRubyDuplicates(protectRecognized(items,oldProjected,evidenceGroup));
+   protectedKana=captureItems.map(cloneRecognitionItem);kanaHistory=protectedKana.map(cloneRecognitionItem);
   referenceCanvas=scanCapture;
   referenceItems=captureItems.map(it=>({...it,box:{...it.box}}));
   rememberRecognition(scanCapture,captureItems,'live-frame');
   flowReset();
-  tracks=placementMotion?captureItems.map(it=>({...it,box:moveBox(it.box,placementMotion)})):captureItems;
+  tracks=placementMotion?captureItems.map(it=>({...it,box:moveBox(it.box,placementMotion),rubyBox:it.rubyBox?moveBox(it.rubyBox,placementMotion):undefined})):captureItems;
   lastFrame=frameSignature;
   alignOverlay();
   paint(tracks);
@@ -1742,8 +1773,8 @@ document.addEventListener?.('visibilitychange',()=>{
  resumeTracking();
  if(!busy&&!stillBusy)setTimeout(scan,0);
 });
-$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');const ocrWarmup=ensureLiveWorker();stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();configureTorch();updateCameraViewport();hasShownLabels=false;documentLabelPalette={epoch:-1,paper:null};protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
-$('stop').onclick=()=>{lastRecognitionDetails=null;if(stillMode)exitStill();resetZoom();active=false;resetTorch();updateCameraInteraction();runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};documentLabelPalette={epoch:-1,paper:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
+$('start').onclick=async()=>{if(active)return;try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access requires HTTPS and a supported browser');const ocrWarmup=ensureLiveWorker();stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();alignOverlay();active=true;stillMode=false;stillButton();resetZoom();analysisControls();configureTorch();updateCameraViewport();hasShownLabels=false;documentLabelPalette={epoch:-1,papers:null};protectedKana=[];kanaHistory=[];historyLastVerified=0;clearFocus();runId++;resetTracking();trackTick();$('start').disabled=true;$('start').hidden=true;$('stop').hidden=false;$('stop').disabled=false;$('scan').disabled=false;scan()}catch(e){$('status').textContent='Unable to start camera: '+e.message}};
+$('stop').onclick=()=>{lastRecognitionDetails=null;if(stillMode)exitStill();resetZoom();active=false;resetTorch();updateCameraInteraction();runId++;cancelPendingFreeze();manualScanPending=false;$('scan').classList.remove('rescanning');sharedRecognition={canvas:null,items:[],source:'',capturedAt:0,signature:null};documentLabelPalette={epoch:-1,papers:null};protectedKana=[];kanaHistory=[];resetTracking();referenceCanvas=null;referenceItems=[];previousItems=[];tracks=[];lastFrame=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;ctx.clearRect(0,0,overlay.width,overlay.height);$('start').disabled=false;$('start').hidden=false;$('stop').disabled=true;$('stop').hidden=true;$('scan').disabled=true;$('status').textContent='Stopped'};let lastGestureAt=0;const pointerStarts=new Map();const pointerMoved=new Set();
 let swipeFocus=null;
 function focusImagePoint(clientX,clientY){
  // The video, Still frame and OCR overlay are all rendered with object-fit:cover.
