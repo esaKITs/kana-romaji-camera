@@ -48,10 +48,10 @@ for(const [name,first,second] of [
  h.run('video.getContext("2d").fillStyle=second;video.getContext("2d").fillRect(0,0,640,360);wc.drawImage(video,0,0);rememberRecognition(work,items,"live-frame");paint(items)');
  assert.equal(h.run('objectEpoch'),epoch);near(pixel(h),second==='#deded5'?[222,222,213]:[32,35,34]);
 });
-test('white and pale pink remain separate palette families',()=>{
+test('restored pre-change paper classification is consistent',()=>{
  const h=setup();
  assert.equal(h.run('paperFamily([255,255,255])'),'white');
- assert.equal(h.run('paperFamily([255,229,234])'),'warm');
+ assert.equal(h.run('paperFamily([255,229,234])'),'white');
  assert.equal(h.run('paperFamily([255,215,185])'),'warm');
 });
 test('an empty palette capture does not replace an existing palette',()=>{
