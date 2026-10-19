@@ -710,10 +710,14 @@ function paint(items){
   // Retain weak observations in diagnostics/evidence, but do not paint them
   // as though they were reliable text. Explicit focus remains available.
   if(!item.focused&&item.state!=='confirmed'&&(item.confidence??0)<55)continue;
-  const b=item.displayBox||item.box,w=b.x1-b.x0,h=b.y1-b.y0;
+  // Verified ruby pairs always use the kanji box, as in 電話番号.
+  // The ruby above the kanji remains visible; only the kanji is covered.
+  const b=item.rubyKanji?item.box:(item.displayBox||item.box),w=b.x1-b.x0,h=b.y1-b.y0;
   // OCR boxes spanning implausibly wide character cells can conceal kanji.
   const glyphCount=[...item.text].length;
-  if(!item.focused&&glyphCount&&w/Math.max(1,h*glyphCount)>1.75)continue;
+  // For ruby pairs item.text is the *reading*, not the kanji glyph count.
+  // Do not reject short kanji (e.g. 塩) because its reading has more kana.
+  if(!item.rubyKanji&&!item.focused&&glyphCount&&w/Math.max(1,h*glyphCount)>1.75)continue;
   if(w<3||h<4){if(item.focused)console.debug('[Label skipped: tiny box]',item);continue;}
   if(!kanaOnly.test(item.text)){if(item.focused)console.debug('[Label skipped: non-kana]',item);continue;}
   const output=romanized.get(item);
