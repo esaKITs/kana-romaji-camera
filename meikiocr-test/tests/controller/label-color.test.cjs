@@ -13,10 +13,10 @@ test('dark paper inside the text region wins over light boundary strokes',()=>{
  const h=setup();h.put('box',box);h.run('wc.fillStyle="#202322";wc.fillRect(0,0,640,360);wc.fillStyle="white";wc.fillRect(100,100,200,3);wc.fillRect(100,124,200,6);wc.fillRect(120,104,4,20)');
  near([...h.run('sampledPaperColor(box,work)')],[32,35,34]);
 });
-test("labels retain the current application's unified document palette",()=>{
+test("labels retain distinct local paper colors within the three-color palette",()=>{
  const h=setup();h.put('items',[reading('ください',90,box),reading('こんにちは',90,{x0:350,y0:100,x1:550,y1:130})]);
  h.run('const v=video.getContext("2d");v.fillStyle="#d9dad1";v.fillRect(0,0,320,360);v.fillStyle="#202322";v.fillRect(320,0,320,360);paint(items)');
- assert.deepEqual(pixel(h),pixel(h,355,105));assert.ok([[217,218,209],[32,35,34]].some(c=>c.every((v,i)=>Math.abs(pixel(h)[i]-v)<10))); 
+ near(pixel(h),[217,218,209]);near(pixel(h,355,105),[32,35,34]); 
 });
 test('the current video seeds one stable palette per object epoch',()=>{
  const h=setup();h.put('items',[reading('ください',90,box)]);
@@ -48,14 +48,15 @@ for(const [name,first,second] of [
  h.run('video.getContext("2d").fillStyle=second;video.getContext("2d").fillRect(0,0,640,360);wc.drawImage(video,0,0);rememberRecognition(work,items,"live-frame");paint(items)');
  assert.equal(h.run('objectEpoch'),epoch);near(pixel(h),second==='#deded5'?[222,222,213]:[32,35,34]);
 });
-test('accepted OCR retains unified paper under modest exposure changes and ignores surrounding package',()=>{
- const h=setup();h.put('items',[reading('ください',90,box)]);
- h.run('wc.fillStyle="#deded5";wc.fillRect(0,0,640,360);rememberRecognition(work,items,"live-frame")');
- h.run('wc.fillStyle="black";wc.fillRect(0,0,640,360);wc.fillStyle="#c7c7ba";wc.fillRect(100,100,200,30);rememberRecognition(work,items,"live-frame")');
- near([...h.run('documentLabelPalette.paper')],[222,222,213]);
+test('white and pale pink remain separate palette families',()=>{
+ const h=setup();
+ assert.equal(h.run('paperFamily([255,255,255])'),'white');
+ assert.equal(h.run('paperFamily([255,229,234])'),'warm');
+ assert.equal(h.run('paperFamily([255,215,185])'),'warm');
 });
-test('empty recognition cannot overwrite the stored palette',()=>{
- const h=setup();h.put('items',[reading('ください',90,box)]);
- h.run('wc.fillStyle="#deded5";wc.fillRect(0,0,640,360);rememberRecognition(work,items,"live-frame");wc.fillStyle="black";wc.fillRect(0,0,640,360);rememberRecognition(work,[],"live-frame")');
- near([...h.run('documentLabelPalette.paper')],[222,222,213]);
+test('an empty palette capture does not replace an existing palette',()=>{
+ const h=setup();
+ h.run('documentLabelPalette={epoch:objectEpoch,papers:[[245,245,245],[255,229,234]]}');
+ const result=h.run('unifiedLabelPaper([],work,1,1,true)');
+ assert.deepEqual(Array.from(result),[[245,245,245],[255,229,234]]);
 });
