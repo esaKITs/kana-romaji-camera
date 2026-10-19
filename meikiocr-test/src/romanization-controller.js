@@ -82,6 +82,21 @@ function romanizeUnits(text,mode=longVowelMode){
  return units;
 }
 function romaji(text,mode=longVowelMode){return romanizeUnits(text,mode).map(x=>x.text).join('')}
+function rubyPronunciationKana(text){
+ const kana=pronunciationKana(text);
+ // Only verified kanji ruby gets this orthographic long-vowel conversion.
+ // The ordinary kana path retains its lexical safeguards (e.g. おもう).
+ return kana.replace(/([おこそとのほもよろごぞどぼぽょぉ])う/g,'$1ー')
+            .replace(/([うくすつぬふむゆるぐずづぶぷゅぅ])う/g,'$1ー')
+            .replace(/([おこそとのほもよろごぞどぼぽょぉ])お/g,'$1ー');
+}
+function rubyKanjiRomaji(text,mode=longVowelMode){
+ const kana=toHiragana(text);
+ // Respect reviewed exceptions rather than turning an arbitrary ou into ō.
+ if(pronunciationOverrides.has(kana)&&pronunciationOverrides.get(kana)===kana)return romaji(kana,mode);
+ return romanizeUnits(rubyPronunciationKana(text),mode).map(x=>x.text).join('');
+}
+
 function verifiedExpressionRomaji(text){
  // These existing fixed expressions are reviewed pronunciation strings, not
  // arbitrary Latin input. Respect word boundaries before removing label spaces.
@@ -118,7 +133,7 @@ function renderRecognitionDetails(){
 // Only explicit OCR join groups may supply context across label fragments.
 // Coordinates, images and recognition items are never modified here.
 function labelRomaji(items){
- const output=new Map(items.map(it=>[it,contextualRomaji(it.text)])),groups=new Map();
+ const output=new Map(items.map(it=>[it,it.rubyKanji?rubyKanjiRomaji(it.text):contextualRomaji(it.text)])),groups=new Map();
  for(const it of items){
   if(!it.joinGroup||!kanaOnly.test(it.text)||/\s/.test(it.text))continue;
   const group=groups.get(it.joinGroup)||[];group.push(it);groups.set(it.joinGroup,group);
