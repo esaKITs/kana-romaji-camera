@@ -38,3 +38,14 @@ export function cachedAnalyzer(analyze,{limit=128,maxCharacters=4096}={}) {
   return result;
  },clear(){cache.clear()},get size(){return cache.size}};
 }
+
+export function separatedSudachiTokens(text,raw){
+ const normalized=withOffsets(text,raw.map(t=>({surface:t.surface,reading:t.readingForm,pos:t.partOfSpeech,unknown:t.isOov})));
+ // Upstream exposes code-point offsets. Verify those against the source; JS uses UTF-16.
+ for(let i=0;i<raw.length;i++){
+  if(!Number.isInteger(raw[i].begin)||!Number.isInteger(raw[i].end)||raw[i].begin<0||raw[i].end<raw[i].begin||raw[i].end>[...text].length)throw Error('Invalid Sudachi source offset');
+  const start=[...text].slice(0,raw[i].begin).join('').length,end=[...text].slice(0,raw[i].end).join('').length;
+  if(normalized[i].start!==start||normalized[i].end!==end)throw Error('Sudachi source-offset mismatch');
+ }
+ return normalized;
+}

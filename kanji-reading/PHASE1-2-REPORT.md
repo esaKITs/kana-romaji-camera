@@ -2,6 +2,8 @@
 
 2026年10月21日 / esaKITs
 
+> 採点の修正と続報は [評価再設計・Still試作報告](PHASE2-CONTINUATION-REPORT.md) を参照してください。本報告の30例スコアは初回調査の履歴です。
+
 ## 結論と到達点
 
 Phase 1のコード調査・構造案と、Phase 2の**初回比較試作**を実施しました。KuromojiとSudachiの2つを実際にNode.jsおよびブラウザWorkerで実行しました。ただし、実機メモリ・OCR同時動作・現行Sudachi小型辞書版の測定が残るため、**Phase 2全体の完了や本採用の決定とはしません**。

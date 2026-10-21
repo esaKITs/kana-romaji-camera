@@ -12,3 +12,10 @@
 - Production reading-engine selection is **pending**, particularly smartphone combined OCR memory.
 
 A new repository is preferred. This session's GitHub connector exposes no repository-create operation, so the authorized development branch is used. A local baseline git bundle is a separate-file recovery copy, not an independent hosted repository. Publish neither the lab nor the second version automatically.
+
+## Continued Phase 2 / minimal Still prototype
+
+- [Updated evaluation and Still report](PHASE2-CONTINUATION-REPORT.md)
+- [100-case results](EVALUATION-100-RESULTS.md)
+- [Reproduction instructions](lab/V2-README.md)
+- Analyzer final selection and product UI are pending user approval.

@@ -1,3 +1,5 @@
+> Current evaluation and Still prototype: [V2 instructions](V2-README.md). The original lab and benchmark below are historical Phase 1/2 tools.
+
 # Local reading comparison lab
 
 A research harness, not the proposed camera UI. No changes to first-version source, workflow or spelling rules. Both analyzers execute locally; only local static files are fetched by browser workers.
