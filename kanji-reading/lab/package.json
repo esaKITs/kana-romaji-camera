@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "kuromoji": "0.1.2",
+    "sudachi": "0.1.5"
+  },
+  "name": "kana-romaji-reading-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node scripts/generate-romanizer.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "benchmark": "npm run generate && node scripts/benchmark.mjs kuromoji && node scripts/benchmark.mjs sudachi",
+    "serve": "node scripts/serve.mjs"
+  }
+}
