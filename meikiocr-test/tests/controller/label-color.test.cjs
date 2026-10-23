@@ -48,11 +48,22 @@ for(const [name,first,second] of [
  h.run('video.getContext("2d").fillStyle=second;video.getContext("2d").fillRect(0,0,640,360);wc.drawImage(video,0,0);rememberRecognition(work,items,"live-frame");paint(items)');
  assert.equal(h.run('objectEpoch'),epoch);near(pixel(h),second==='#deded5'?[222,222,213]:[32,35,34]);
 });
-test('restored pre-change paper classification is consistent',()=>{
+test('adaptive paper palette separates the three measured paper tones',()=>{
  const h=setup();
- assert.equal(h.run('paperFamily([255,255,255])'),'white');
- assert.equal(h.run('paperFamily([255,229,234])'),'white');
- assert.equal(h.run('paperFamily([255,215,185])'),'warm');
+ const samples=[
+  {rgb:[194,200,197],weight:2},
+  {rgb:[192,162,165],weight:4},
+  {rgb:[195,130,131],weight:4}
+ ];
+ const palette=h.run('detectPaperPalette('+JSON.stringify(samples)+')');
+ assert.equal(palette.length,3);
+ const chosen=samples.map(s=>h.run('labelPaperFor('+JSON.stringify(s.rgb)+','+JSON.stringify(palette)+')'));
+ assert.equal(new Set(chosen.map(x=>JSON.stringify(x))).size,3);
+});
+test('adaptive palette does not invent colors from illumination differences',()=>{
+ const h=setup();
+ const palette=h.run('detectPaperPalette([{rgb:[245,245,245]},{rgb:[210,210,210]},{rgb:[190,190,190]}])');
+ assert.equal(palette.length,1);
 });
 test('an empty palette capture does not replace an existing palette',()=>{
  const h=setup();
