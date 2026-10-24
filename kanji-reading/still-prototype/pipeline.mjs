@@ -1,3 +1,4 @@
+import {displayTokens} from './display-tokens.mjs';
 import {allocateLabels} from './layout.mjs';
 import {splitOkurigana,isHan,isTarget,modes,reviewReason} from '../lab/src/policy.mjs';
 import {candidateRomanization} from '../lab/src/format.mjs';
@@ -45,7 +46,7 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
  const consumedRuby=new Set(candidates.map(p=>p.rubyLineId)),labels=[],withheld=[];
  for(const line of lines){
   if(consumedRuby.has(line.id))continue;
-  const tokens=await analyze(line.text);
+  const tokens=displayTokens(line.text,await analyze(line.text),mode,pairs.filter(p=>p.lineId===line.id));
   for(const pair of pairs.filter(p=>p.lineId===line.id)){
    labels.push({source:pair.source,reading:pair.reading,output:rubyKanjiRomaji(pair.reading,style),box:pair.box,lineId:line.id,readingSource:'verified-ruby',coversRuby:false});
   }
@@ -58,6 +59,7 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
    const review=pair?null:reviewReason(token);
    if(review){if(isHan(token.surface))withheld.push({surface:token.surface,reason:review});continue;}
    const reading=pair?.reading||token.reading;if(!reading)continue;
+   if(/[ッっ]$/.test(reading)){withheld.push({surface:token.surface,reason:'incomplete-sokuon'});continue;}
    const allTarget=[...token.surface].every(c=>isTarget(c,mode));
    let parts;
    if(allTarget)parts=[{surface:token.surface,reading,start:0,end:token.surface.length}];
