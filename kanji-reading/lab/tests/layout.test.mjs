@@ -18,3 +18,13 @@ test('row fitting cannot displace a short particle beyond its own source',()=>{
  assert.equal(r.drawn.length,3);assert.equal(r.omitted.length,0);
  const particle=r.drawn.find(l=>l.source==='に');assert.ok(particle.displayBox.x0<340&&particle.displayBox.x1>294);assert.ok(particle.horizontalScale>=.7&&particle.horizontalScale<1);
 });
+test('curved or slanted baselines do not inflate romaji size to the union height',()=>{
+ const s=scene([['品質',10,80,'hinshitsu'],['に',80,110,'ni'],['問題',110,180,'mondai']]);
+ s.lines[0].glyphs.forEach((g,i)=>{g.box.y0=10+i*22;g.box.y1=50+i*22;});s.lines[0].box.y1=94;
+ s.labels.forEach((l,i)=>{l.box={...s.lines[0].glyphs[i].box};});
+ const r=allocateLabels(s,210,110,measure);assert.equal(r.drawn.length,3);assert.equal(r.omitted.length,0);assert.ok(r.drawn.every(l=>l.fontSize<=40*.56));
+});
+test('anchor pressure triggers wrapping even when the total canvas width is ample',()=>{
+ const s=scene([['長語',10,70,'abcdefghijklmno'],['短語',70,110,'toshokan'],['に',110,140,'ni']]);
+ const r=allocateLabels(s,800,90,measure);assert.equal(r.drawn.length,3);assert.equal(r.omitted.length,0);assert.ok(r.drawn.some(l=>l.rows.length===2));
+});

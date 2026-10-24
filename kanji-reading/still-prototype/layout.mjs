@@ -17,7 +17,11 @@ export function allocateLabels(result,width,height,measure,{minScale=.70}={}){
  for(const line of result.lines){
   const labels=result.labels.filter(l=>l.lineId===line.id).sort((a,b)=>a.box.x0-b.box.x0);
   const protectedGlyphs=result.lines.flatMap(l=>l.glyphs).filter(g=>!labels.some(l=>g.box.x0>=l.box.x0-.5&&g.box.x1<=l.box.x1+.5&&g.box.y0>=l.box.y0-.5&&g.box.y1<=l.box.y1+.5));
-  const font=(line.box.y1-line.box.y0)*.56;
+  // Curved packaging/slanted baselines enlarge the union box without enlarging
+  // the characters. Use character height rather than the whole line's envelope.
+  const heights=line.glyphs.map(g=>g.box.y1-g.box.y0).filter(h=>Number.isFinite(h)&&h>0).sort((a,b)=>a-b);
+  const characterHeight=heights.length?heights[Math.floor(heights.length/2)]:line.box.y1-line.box.y0;
+  const font=Math.min(line.box.y1-line.box.y0,characterHeight)*.56;
   const cells=labels.map(label=>{
    const b=label.box,obstacles=protectedGlyphs.map(g=>g.box).filter(q=>q.y0<b.y1&&q.y1>b.y0);
    const center=(b.x0+b.x1)/2;
@@ -29,9 +33,9 @@ export function allocateLabels(result,width,height,measure,{minScale=.70}={}){
    const left=group[0].left,right=group.at(-1).right,available=right-left,gap=2,padding=4;
    let items=group.map(c=>({...c,rows:[c.label.output],font,natural:measure(c.label.output,font)}));
    const required=()=>items.reduce((n,i)=>n+i.natural*minScale+padding,0)+gap*(items.length-1);
-   if(required()>available){
+   if(required()>available||!anchorBounds(minScale)){
     const options=items.map((item,index)=>({index,split:rowsFor(item.label.output,t=>measure(t,font*.82)),h:item.label.box.y1-item.label.box.y0})).filter(o=>o.split&&font*.82*2<=o.h).sort((a,b)=>(items[b.index].natural-b.split.width)-(items[a.index].natural-a.split.width));
-    for(const option of options){if(required()<=available)break;const item=items[option.index];item.rows=option.split.rows;item.font=font*.82;item.natural=option.split.width;}
+    for(const option of options){if(required()<=available&&anchorBounds(minScale))break;const item=items[option.index];item.rows=option.split.rows;item.font=font*.82;item.natural=option.split.width;}
    }
    // Allocate in source order; a shared scale preserves typographic consistency.
    const natural=items.reduce((n,i)=>n+i.natural,0);let scale=Math.min(1,(available-padding*items.length-gap*(items.length-1))/Math.max(1,natural));
@@ -46,6 +50,11 @@ export function allocateLabels(result,width,height,measure,{minScale=.70}={}){
     // A crowded group must not suppress unrelated labels that still fit locally.
     for(const cell of group){const b=cell.label.box;const clipped={...b,x0:Math.max(b.x0,cell.left),x1:Math.min(b.x1,cell.right)};const w=clipped.x1-clipped.x0;const s=Math.min(1,(w-padding)/Math.max(1,measure(cell.label.output,font)));
      if(!cell.blocked&&s>=minScale)place(cell.label,[cell.label.output],font,s,clipped);
+     else if(!cell.blocked){
+      const split=rowsFor(cell.label.output,t=>measure(t,font*.82)),wrappedScale=split?Math.min(1,(w-padding)/Math.max(1,split.width)):0;
+      if(split&&font*.82*2<=b.y1-b.y0&&wrappedScale>=minScale)place(cell.label,split.rows,font*.82,wrappedScale,clipped);
+      else omitted.push({...cell.label,reason:'line-allocation-required'});
+     }
      else omitted.push({...cell.label,reason:cell.blocked?'protected-glyph-collision':'line-allocation-required'});
     }
     continue;

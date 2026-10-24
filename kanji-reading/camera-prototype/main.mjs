@@ -17,7 +17,7 @@ function stopStream(){stopMotion();clearTimeout(timer);timer=null;stream?.getTra
 function clearLayer(){lastPaint=null;paintedFrame=false;for(const id of ['output','guides']){const c=$(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}}
 function home(){paperState.reset();opening++;session.enter('home');pending=false;stopStream();cache=null;lastFrame=null;clearLayer();screen();message('Horizontal printed Japanese · development preview');}
 async function engines(){if(!ready){message('Loading OCR and reading data…',true);ready=initialize('kuromoji').catch(error=>{ready=null;throw error;});}await ready;}
-function drawGuides(result){const c=$('guides');c.width=$('output').width;c.height=$('output').height;const x=c.getContext('2d');if(!guides||!result)return;x.strokeStyle='#37d78d';x.lineWidth=2;for(const l of result.labels){const b=l.box;x.strokeRect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);}}
+function drawGuides(result){const c=$('guides');c.width=$('output').width;c.height=$('output').height;const x=c.getContext('2d');if(!guides||!result)return;x.lineWidth=2;for(const l of result.labels){x.strokeStyle=lastPaint?.layout.drawn.some(d=>d.lineId===l.lineId&&d.source===l.source&&d.box.x0===l.box.x0)?'#37d78d':'#ffbf47';const b=l.box;x.strokeRect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);}}
 function showResult(layout,source,kind){lastPaint={layout,source,kind};paintLabels($('output'),source,layout,{still:kind==='still',reveal});}
 function capture(){const video=$('video');if(!video.videoWidth)throw Error('The camera has no frame yet.');const s=Math.min(1,1200/Math.max(video.videoWidth,video.videoHeight)),c=document.createElement('canvas');c.width=Math.round(video.videoWidth*s);c.height=Math.round(video.videoHeight*s);c.getContext('2d').drawImage(video,0,0,c.width,c.height);return c;}
 function videoSignature(source=$('video')){motionContext.drawImage(source,0,0,96,64);return fingerprint(motionContext.getImageData(0,0,96,64).data);}
@@ -43,7 +43,7 @@ async function processScene(){
   if(!session.owns(generation))return;
   if(kind==='live'&&!motion.accepts(capturedSignature,videoSignature(),captureEpoch,performance.now())){clearLayer();lastFrame=null;message('Live · hold steady');return;}
   if(kind==='still'){cache={source,value:result};showResult(result.rendering,source,kind);}else{showResult(result.rendering,source,kind);paintedFrame=true;motion.painted(capturedSignature);}
-  lastFrame=result.result;drawGuides(lastFrame);message(kind==='live'?(result.rendering.drawn.length?'Live · '+result.rendering.drawn.length+' labels':'Live · looking for text'):'Still · finished');
+  lastFrame=result.result;drawGuides(lastFrame);message(kind==='live'?(result.rendering.drawn.length?'Live · '+result.rendering.drawn.length+' labels':'Live · looking for text'):'Still · '+result.rendering.drawn.length+' shown'+(result.rendering.omitted?.length?' · '+result.rendering.omitted.length+' not fitted':''));
  }catch(error){if(session.owns(generation)){message('Unable to read: '+error.message,false);clearLayer();if(kind==='still'&&session.source)renderSource(session.source);}}});
  if(pending&&session.kind!=='home')queueMicrotask(processScene);
 }
