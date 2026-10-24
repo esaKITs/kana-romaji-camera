@@ -1,4 +1,4 @@
-import {displayTokens} from './display-tokens.mjs';
+import {displayTokens,openingBullet} from './display-tokens.mjs';
 import {allocateLabels} from './layout.mjs';
 import {splitOkurigana,isHan,isTarget,modes,reviewReason} from '../lab/src/policy.mjs';
 import {candidateRomanization} from '../lab/src/format.mjs';
@@ -43,14 +43,17 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
   const reread=await verifyRuby(c);
   if(reread?.normalize('NFC')===c.reading.normalize('NFC'))pairs.push({...c,verified:true});
  }
- const consumedRuby=new Set(candidates.map(p=>p.rubyLineId)),labels=[],withheld=[];
+ const consumedRuby=new Set(candidates.map(p=>p.rubyLineId)),labels=[],withheld=[],nonReading=[];
  for(const line of lines){
   if(consumedRuby.has(line.id))continue;
-  const tokens=displayTokens(line.text,await analyze(line.text),mode,pairs.filter(p=>p.lineId===line.id));
+  const rawTokens=await analyze(line.text),candidate=openingBullet(line),bullet=candidate&&rawTokens.some(t=>t.start===0&&t.end===1)?candidate:null;
+  if(bullet)nonReading.push({...bullet,lineId:line.id});
+  const tokens=displayTokens(line.text,rawTokens,mode,pairs.filter(p=>p.lineId===line.id),{bulletEnd:bullet?.end});
   for(const pair of pairs.filter(p=>p.lineId===line.id)){
    labels.push({source:pair.source,reading:pair.reading,output:rubyKanjiRomaji(pair.reading,style),box:pair.box,lineId:line.id,readingSource:'verified-ruby',coversRuby:false});
   }
   for(const token of tokens){
+   if(bullet&&token.start===0&&token.end===bullet.end)continue;
    if(pairs.some(p=>p.lineId===line.id&&token.start<p.end&&token.end>p.start)){
     // Whole-ruby spans override analyzer boundaries. Partial overlaps are withheld.
     continue;
@@ -76,7 +79,7 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
    }
   }
  }
- return {mode,style,lines:lines.map(l=>({id:l.id,text:l.text,box:l.box,glyphs:l.glyphs})),pairs,labels,withheld};
+ return {mode,style,lines:lines.map(l=>({id:l.id,text:l.text,box:l.box,glyphs:l.glyphs})),pairs,labels,withheld,nonReading};
 }
 // Subtract preserved glyph rectangles from a background/text region.
 export function visibleRegions(box,obstacles){

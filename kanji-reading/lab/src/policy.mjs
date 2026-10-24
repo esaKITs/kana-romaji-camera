@@ -11,6 +11,7 @@ const reviewWords=['一日','生物','人気','今日','明日','上手','下手
 export function reviewReason(token){
  if(token.numericValidated&&token.reading)return null;
  if(token.lexicalValidated&&token.surface==='十分'&&token.reading==='ジュウブン'&&!token.unknown&&!token.pos?.includes('固有名詞'))return null;
+ if(token.lexicalCompoundValidated&&token.surface==='万一'&&token.reading==='マンイチ'&&!token.unknown&&!token.pos?.includes('固有名詞'))return null;
  if(!isHan(token.surface))return null;
  if(token.unknown||!token.reading)return 'unknown-reading';
  if(token.pos?.includes('固有名詞'))return 'proper-name';

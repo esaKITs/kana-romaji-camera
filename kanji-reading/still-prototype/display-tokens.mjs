@@ -1,6 +1,24 @@
 import{isTarget,reviewReason}from'../lab/src/policy.mjs';
 // Display grouping only: raw analyzer/evaluation tokens remain unchanged.
-export function displayTokens(text,tokens,mode,pairs=[]){
+export function openingBullet(line){
+ if(!/^〇万一(?:[^0-9０-９〇一二三四五六七八九十百千万億兆]|$)/u.test(line.text))return null;
+ const g=line.glyphs[0],h=g?.box.y1-g?.box.y0,w=g?.box.x1-g?.box.x0,lh=line.box.y1-line.box.y0;
+ return g?.text==='〇'&&w/h>=.7&&w/h<=1.3&&h/lh>=.5&&h/lh<=1.5?{start:0,end:1,box:g.box,source:'〇',reason:'list-marker-before-lexical-phrase'}:null;
+}
+export function lexicalTokens(text,tokens,pairs=[],bulletEnd=null){
+ const replacements=[];
+ for(const match of text.matchAll(/万一/gu)){
+  const start=match.index,end=start+2,numeric=/[0-9０-９〇一二三四五六七八九十百千万億兆]/u;
+  if((start>0&&start!==bulletEnd&&numeric.test(text[start-1]))||numeric.test(text[end]||''))continue;
+  if(pairs.some(p=>start<p.end&&end>p.start))continue;
+  const touched=tokens.filter(t=>t.start<end&&t.end>start);
+  if(!touched.length||touched[0].start!==start||touched.at(-1).end!==end||touched.map(t=>t.surface).join('')!=='万一'||touched.some(t=>t.pos?.includes('固有名詞')))continue;
+  replacements.push({surface:'万一',start,end,reading:'マンイチ',pos:['副詞'],unknown:false,lexicalCompoundValidated:true,readingSource:'authored-lexical-reading-v1'});
+ }
+ return tokens.flatMap(t=>{const r=replacements.find(r=>r.start<t.end&&r.end>t.start);return r?(t.start===r.start?[r]:[]):[{...t}];});
+}
+export function displayTokens(text,tokens,mode,pairs=[],{bulletEnd=null}={}){
+ tokens=lexicalTokens(text,tokens,pairs,bulletEnd);
  const output=[];
  for(const original of tokens){
   let token={...original};
