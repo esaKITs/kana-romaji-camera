@@ -16,6 +16,7 @@ async function scan(canvas,id){
  const rgba=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,canvas.width,canvas.height).data;
  return ocr.scan({frameId:id,width:canvas.width,height:canvas.height,capturedAtMs:performance.now(),rgba:rgba.buffer.slice(0)},{transfer:'move'});
 }
+export async function analyzeText(text){return (await rpc({command:'analyze',text,numeric:true})).tokens;}
 export async function runStill(source,{mode='あア漢',style='double',output=null}={}){
  if(!ocr||!readingWorker)throw Error('Initialize first');
  const t=performance.now(),snapshot=await scan(source,'still-'+requestId),rubyChecks=[];
