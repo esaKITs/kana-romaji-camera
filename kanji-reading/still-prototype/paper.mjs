@@ -32,3 +32,23 @@ export class StablePapers{
   return this.papers.map(p=>[...p]);
  }
 }
+// Camera-only palette: fixed representatives suppress color pumping while allowing
+// many local paper colors. Bounded storage; the original three-tone lab stays intact.
+export class AdaptivePapers{
+ constructor({limit=32,tolerance=24}={}){this.limit=limit;this.tolerance=tolerance;this.reset();}
+ reset(){this.papers=[];this.labels=new Map();}
+ resolve(samples){
+  for(const {rgb} of [...samples].sort((a,b)=>(b.weight??1)-(a.weight??1))){
+   if(this.papers.length<this.limit&&!this.papers.some(p=>distance(p,rgb)<=this.tolerance))this.papers.push(rgb.map(Math.round));
+  }
+  return this.papers.length?this.papers.map(p=>[...p]):[[245,245,245]];
+ }
+ colorFor(rgb,label){
+  const b=label.box,key=(label.source??label.output)+':'+Math.round((b.y0+b.y1)/Math.max(20,b.y1-b.y0));
+  const previous=this.labels.get(key);
+  if(previous&&distance(previous,rgb)<44)return [...previous];
+  const chosen=this.papers.reduce((best,p)=>distance(rgb,p)<distance(rgb,best)?p:best,this.papers[0]??rgb);
+  if(this.labels.size>=512)this.labels.delete(this.labels.keys().next().value);
+  this.labels.set(key,[...chosen]);return [...chosen];
+ }
+}

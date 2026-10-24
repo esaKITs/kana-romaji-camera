@@ -97,7 +97,7 @@ export function renderResult(canvas,source,result,{paperState=null}={}){
  const layout=allocateLabels(result,canvas.width,canvas.height,(text,font)=>{ctx.font=`700 ${font}px system-ui`;return ctx.measureText(text).width;});
  const samples=layout.drawn.map(l=>({rgb:sampledPaperColor(l.box,source),weight:Math.min(5,Math.max(1,Math.sqrt((l.box.x1-l.box.x0)*(l.box.y1-l.box.y0))/30))}));
  const papers=paperState?paperState.resolve(samples):selectPapers(samples);layout.papers=papers;
- layout.drawn.forEach((l,i)=>{l.backgroundRgb=paperFor(samples[i].rgb,papers);l.backgroundColor='rgb('+l.backgroundRgb.join(',')+')';l.foregroundColor=foregroundFor(l.backgroundRgb);});
+ layout.drawn.forEach((l,i)=>{l.backgroundRgb=paperState?.colorFor?paperState.colorFor(samples[i].rgb,l):paperFor(samples[i].rgb,papers);l.backgroundColor='rgb('+l.backgroundRgb.join(',')+')';l.foregroundColor=foregroundFor(l.backgroundRgb);});
  const replaced=g=>layout.drawn.some(l=>g.box.x0>=l.box.x0-.5&&g.box.x1<=l.box.x1+.5&&g.box.y0>=l.box.y0-.5&&g.box.y1<=l.box.y1+.5);
  const preserved=result.lines.flatMap(l=>l.glyphs).filter(g=>!replaced(g)).map(g=>g.box);
  // First clear the entire source word, independently of its new text position.

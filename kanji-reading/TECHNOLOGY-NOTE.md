@@ -36,3 +36,7 @@
 「AI不使用」は不正確です。OCRには機械学習モデルを使っています。「生成AI不使用」が適切です。「完全オフライン」「通信なし」「誤読しない」「文脈を理解して必ず読み分ける」とは説明しません。ダウンロードや通常のWebアクセスは発生し、配信サービスが通常の接続情報を扱う場合があります。本人限定の試用ページではChatGPTログインが必要ですが、それは画像認識にChatGPTを利用する意味ではありません。
 
 ライセンスは一律MITではありません。MeikiOCR WebはGPL-3.0-only、OCRモデルはLGPL-3.0、ONNX RuntimeはMIT、KuromojiはApache-2.0とIPADIC通知、UniDic由来データはmodified BSDです。元の表示と対応ソースを維持します。解析器の最終採用は未決定です。
+
+## 2026-10-24 camera update
+
+The development camera uses translation-tolerant scene-change rejection, not object tracking. Labels sample local paper colors with a bounded 32-tone palette and hysteresis. A separate four-step control reveals the original image beneath fully opaque romaji. Portrait and landscape layouts are implemented; this revision still requires physical-phone Live validation. See LIVE-LANDSCAPE-REPORT.md.

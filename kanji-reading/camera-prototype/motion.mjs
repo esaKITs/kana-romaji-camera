@@ -19,3 +19,22 @@ export class MotionGuard{
  accepts(captured,current,epoch,now){this.observe(current,now);return epoch===this.epoch&&this.stable(now)&&frameDistance(captured,current)<=this.threshold;}
  painted(captured){this.anchor=captured;}
 }
+// Small hand tremors must not starve Live OCR. Compare the central image while
+// allowing up to two fingerprint pixels of translation; major moves still reject.
+export function alignedDistance(a,b,width=96,height=64){
+ if(!a||!b||a.length!==width*height||b.length!==a.length)return Infinity;
+ let best=Infinity;
+ for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+  let sum=0,n=0;for(let y=3;y<height-3;y+=2)for(let x=3;x<width-3;x+=2){sum+=Math.abs(a[y*width+x]-b[(y+dy)*width+x+dx]);n++;}
+  best=Math.min(best,sum/n);
+ }return best;
+}
+export class LiveMotionGuard extends MotionGuard{
+ constructor(){super({threshold:.65,settleMs:150});}
+ observe(sample,now){
+  if(!this.last){this.last=sample;this.anchor=sample;this.quietSince=now;return false;}
+  const moved=alignedDistance(sample,this.anchor)>this.threshold;
+  this.last=sample;if(moved){this.epoch++;this.anchor=sample;this.quietSince=now;}return moved;
+ }
+ accepts(captured,current,epoch,now){this.observe(current,now);return epoch===this.epoch&&this.stable(now)&&alignedDistance(captured,current)<=this.threshold;}
+}
