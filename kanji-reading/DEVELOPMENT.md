@@ -19,3 +19,10 @@ A new repository is preferred. This session's GitHub connector exposes no reposi
 - [100-case results](EVALUATION-100-RESULTS.md)
 - [Reproduction instructions](lab/V2-README.md)
 - Analyzer final selection and product UI are pending user approval.
+
+## Numeric pronunciation continuation — 2026-10-24
+
+- [Numeric rules, evaluation and Still report](NUMERIC-READING-REPORT.md)
+- [Original 100 before/after](NUMERIC-BASE-100-RESULTS.md)
+- [Extra 80 + 20 guards](NUMERIC-EXTRA-100-RESULTS.md)
+- Main/public UI and final analyzer selection remain unchanged.

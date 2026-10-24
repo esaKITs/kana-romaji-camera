@@ -19,7 +19,7 @@ async function scan(canvas,id){
 export async function runStill(source,{mode='あア漢',style='double',output=null}={}){
  if(!ocr||!readingWorker)throw Error('Initialize first');
  const t=performance.now(),snapshot=await scan(source,'still-'+requestId),rubyChecks=[];
- const result=await analyzeSnapshot(snapshot,async text=>(await rpc({command:'analyze',text})).tokens,{mode,style,verifyRuby:async c=>{
+ const result=await analyzeSnapshot(snapshot,async text=>(await rpc({command:'analyze',text,numeric:true})).tokens,{mode,style,verifyRuby:async c=>{
   const b=c.rubyBox,pad=4,scale=4,crop=document.createElement('canvas');
   const x=Math.max(0,b.x0-pad),y=Math.max(0,b.y0-pad),w=Math.min(source.width-x,b.x1-b.x0+pad*2),h=Math.min(source.height-y,b.y1-b.y0+pad*2),margin=80;
   crop.width=Math.ceil(w*scale)+margin*2;crop.height=Math.ceil(h*scale)+margin*2;
@@ -30,4 +30,4 @@ export async function runStill(source,{mode='あア漢',style='double',output=nu
  return {elapsedMs:performance.now()-t,rawText:snapshot.lines.map(l=>l.text).join('\n'),snapshot,result,rubyChecks,rendering};
 }
 export async function dispose(){readingWorker?.terminate();readingWorker=null;for(const p of waiting.values()){clearTimeout(p.timer);p.reject(Error('Disposed'));}waiting.clear();if(ocr)await ocr.dispose();ocr=null;}
-window.stillLab={initialize,runStill,dispose,analyzeSnapshot,renderResult,analyze:async text=>(await rpc({command:"analyze",text})).tokens};
+window.stillLab={initialize,runStill,dispose,analyzeSnapshot,renderResult,analyze:async text=>(await rpc({command:"analyze",text,numeric:true})).tokens};

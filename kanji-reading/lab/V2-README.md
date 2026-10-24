@@ -46,3 +46,7 @@ To inspect the local Still diagnostic page, run `node --input-type=module -e "im
 Actual MeikiOCR inference on generated horizontal printed-text PNGs → positional ruby matching → independent enlarged-crop OCR recheck → common reading engine → existing romanizer → canvas labels. Three fixed modes are exercised on the OCR snapshots. Whole-ruby spans override analyzer token boundaries; uncertain candidate ruby lines do not get independent duplicate labels. Simple okurigana splits use exact OCR glyph boxes.
 
 The renderer is for white test pages only. It can use horizontal whitespace, then bounded horizontal compression, and withholds labels that would collide or be too narrow. General line allocation, adaptive palette reuse, partial/interleaved ruby, sloped images, physical prints/phones, Live integration, long sessions and recovery remain unvalidated. Raw OCR can misrecognize 生 as 牛; ruby priority does not prove correct character recognition.
+
+## Numeric continuation
+
+See [the numeric report](../NUMERIC-READING-REPORT.md). Run `npm run evaluate:numeric`, then `node scripts/make-numeric-fixture.cjs` and the browser/Still scripts `browser-numeric.mjs` / `still-numeric-test.mjs`. Numeric reading is opt-in per Worker message and enabled in the Still research harness. Original raw analyzers and historical evaluation remain reproducible.

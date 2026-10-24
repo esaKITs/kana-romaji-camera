@@ -9,6 +9,7 @@ export function isTarget(char,mode){
 // An experimental review gate, not a confidence probability or complete list.
 const reviewWords=['一日','生物','人気','今日','明日','上手','下手','何'];
 export function reviewReason(token){
+ if(token.numericValidated&&token.reading)return null;
  if(!isHan(token.surface))return null;
  if(token.unknown||!token.reading)return 'unknown-reading';
  if(token.pos?.includes('固有名詞'))return 'proper-name';

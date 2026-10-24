@@ -7,7 +7,8 @@ self.onmessage=async({data})=>{
   }
   if(data.command==='dispose'){engine?.dispose();engine=null;self.postMessage({id:data.id,disposed:true});return;}
   if(!engine)throw Error('Engine not initialized');
-  const t=performance.now(),tokens=engine.analyze(data.text);
-  self.postMessage({id:data.id,tokens,analysisMs:performance.now()-t,wasmMemoryBytes:engine.wasmMemory?.()??null});
+  const t=performance.now();let tokens=engine.analyze(data.text),numericDecisions=null;
+  if(data.numeric){const {applyNumericReadings}=await import('./src/numeric-reading.mjs');const corrected=applyNumericReadings(data.text,tokens);tokens=corrected.tokens;numericDecisions=corrected.decisions;}
+  self.postMessage({id:data.id,tokens,numericDecisions,analysisMs:performance.now()-t,wasmMemoryBytes:engine.wasmMemory?.()??null});
  }catch(e){self.postMessage({id:data.id,error:e.message||String(e)})}
 };

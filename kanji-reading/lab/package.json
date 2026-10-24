@@ -13,6 +13,7 @@
     "serve": "node scripts/serve.mjs",
     "evaluate:v2": "node scripts/review-original-30.mjs && node scripts/evaluate-v2.mjs kuromoji && node scripts/evaluate-v2.mjs sudachi-small",
     "build:still": "node ../../meikiocr-test/node_modules/vite/bin/vite.js build --config ../still-prototype/vite.config.mjs",
-    "benchmark:historical": "npm run generate && node scripts/benchmark.mjs kuromoji && node scripts/benchmark.mjs sudachi"
+    "benchmark:historical": "npm run generate && node scripts/benchmark.mjs kuromoji && node scripts/benchmark.mjs sudachi",
+    "evaluate:numeric": "node scripts/evaluate-numeric.mjs"
   }
 }
