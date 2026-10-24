@@ -1,3 +1,4 @@
+import {sampledPaperColor,selectPapers,paperFor,foregroundFor} from './paper.mjs';
 import {displayTokens,openingBullet} from './display-tokens.mjs';
 import {allocateLabels} from './layout.mjs';
 import {splitOkurigana,isHan,isTarget,modes,reviewReason} from '../lab/src/policy.mjs';
@@ -91,9 +92,12 @@ export function visibleRegions(box,obstacles){
  }regions=next;}
  return regions;
 }
-export function renderResult(canvas,source,result){
+export function renderResult(canvas,source,result,{paperState=null}={}){
  canvas.width=source.width;canvas.height=source.height;const ctx=canvas.getContext('2d');ctx.drawImage(source,0,0);
  const layout=allocateLabels(result,canvas.width,canvas.height,(text,font)=>{ctx.font=`700 ${font}px system-ui`;return ctx.measureText(text).width;});
+ const samples=layout.drawn.map(l=>({rgb:sampledPaperColor(l.box,source),weight:Math.min(5,Math.max(1,Math.sqrt((l.box.x1-l.box.x0)*(l.box.y1-l.box.y0))/30))}));
+ const papers=paperState?paperState.resolve(samples):selectPapers(samples);layout.papers=papers;
+ layout.drawn.forEach((l,i)=>{l.backgroundRgb=paperFor(samples[i].rgb,papers);l.backgroundColor='rgb('+l.backgroundRgb.join(',')+')';l.foregroundColor=foregroundFor(l.backgroundRgb);});
  const replaced=g=>layout.drawn.some(l=>g.box.x0>=l.box.x0-.5&&g.box.x1<=l.box.x1+.5&&g.box.y0>=l.box.y0-.5&&g.box.y1<=l.box.y1+.5);
  const preserved=result.lines.flatMap(l=>l.glyphs).filter(g=>!replaced(g)).map(g=>g.box);
  // First clear the entire source word, independently of its new text position.
@@ -101,10 +105,10 @@ export function renderResult(canvas,source,result){
  for(const label of layout.drawn){
   const b=label.box,pad=2,sourceBox={x0:Math.max(0,b.x0-pad),x1:Math.min(canvas.width,b.x1+pad),y0:Math.max(0,b.y0-pad),y1:Math.min(canvas.height,b.y1+pad)};
   label.eraseRegions=visibleRegions(sourceBox,preserved);label.textRegions=visibleRegions(label.displayBox,preserved);
-  ctx.fillStyle='#fff';for(const r of [...label.eraseRegions,...label.textRegions])ctx.fillRect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);
+  ctx.fillStyle=label.backgroundColor;for(const r of [...label.eraseRegions,...label.textRegions])ctx.fillRect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);
  }
  for(const label of layout.drawn){
-  const b=label.displayBox;ctx.save();ctx.beginPath();for(const r of label.textRegions)ctx.rect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);ctx.clip();ctx.translate((b.x0+b.x1)/2,(b.y0+b.y1)/2);ctx.scale(label.horizontalScale,1);ctx.font=`700 ${label.fontSize}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#15212a';
+  const b=label.displayBox;ctx.save();ctx.beginPath();for(const r of label.textRegions)ctx.rect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);ctx.clip();ctx.translate((b.x0+b.x1)/2,(b.y0+b.y1)/2);ctx.scale(label.horizontalScale,1);ctx.font=`700 ${label.fontSize}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=label.foregroundColor;
   label.rows.forEach((row,i)=>ctx.fillText(row,0,(i-(label.rows.length-1)/2)*label.fontSize));ctx.restore();
  }
  return layout;

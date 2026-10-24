@@ -17,7 +17,7 @@ async function scan(canvas,id){
  return ocr.scan({frameId:id,width:canvas.width,height:canvas.height,capturedAtMs:performance.now(),rgba:rgba.buffer.slice(0)},{transfer:'move'});
 }
 export async function analyzeText(text){return (await rpc({command:'analyze',text,numeric:true})).tokens;}
-export async function runStill(source,{mode='あア漢',style='double',output=null}={}){
+export async function runStill(source,{mode='あア漢',style='double',output=null,paperState=null}={}){
  if(!ocr||!readingWorker)throw Error('Initialize first');
  const t=performance.now(),snapshot=await scan(source,'still-'+requestId),rubyChecks=[];
  const result=await analyzeSnapshot(snapshot,async text=>(await rpc({command:'analyze',text,numeric:true})).tokens,{mode,style,verifyRuby:async c=>{
@@ -27,7 +27,7 @@ export async function runStill(source,{mode='あア漢',style='double',output=nu
   const context=crop.getContext('2d');context.fillStyle='white';context.fillRect(0,0,crop.width,crop.height);context.drawImage(source,x,y,w,h,margin,margin,w*scale,h*scale);
   const recheck=await scan(crop,'ruby-'+requestId),reading=recheck.lines.map(l=>l.glyphs.map(g=>g.text).join('')).join('').replace(/\s/g,'');rubyChecks.push({source:c.source,first:c.reading,second:reading});return reading;
  }});
- const rendering=output?renderResult(output,source,result):null;
+ const rendering=output?renderResult(output,source,result,{paperState}):null;
  return {elapsedMs:performance.now()-t,rawText:snapshot.lines.map(l=>l.text).join('\n'),snapshot,result,rubyChecks,rendering};
 }
 export async function dispose(){readingWorker?.terminate();readingWorker=null;for(const p of waiting.values()){clearTimeout(p.timer);p.reject(Error('Disposed'));}waiting.clear();if(ocr)await ocr.dispose();ocr=null;}
