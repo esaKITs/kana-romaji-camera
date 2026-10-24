@@ -76,12 +76,30 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
  }
  return {mode,style,lines:lines.map(l=>({id:l.id,text:l.text,box:l.box,glyphs:l.glyphs})),pairs,labels,withheld};
 }
+// Subtract preserved glyph rectangles from a background/text region.
+export function visibleRegions(box,obstacles){
+ let regions=[box];
+ for(const q of obstacles){const next=[];for(const r of regions){
+  const x0=Math.max(r.x0,q.x0),x1=Math.min(r.x1,q.x1),y0=Math.max(r.y0,q.y0),y1=Math.min(r.y1,q.y1);
+  if(x1<=x0||y1<=y0){next.push(r);continue;}
+  for(const part of [{x0:r.x0,x1:r.x1,y0:r.y0,y1:y0},{x0:r.x0,x1:r.x1,y0:y1,y1:r.y1},{x0:r.x0,x1:x0,y0,y1},{x0:x1,x1:r.x1,y0,y1}])if(part.x1>part.x0&&part.y1>part.y0)next.push(part);
+ }regions=next;}
+ return regions;
+}
 export function renderResult(canvas,source,result){
  canvas.width=source.width;canvas.height=source.height;const ctx=canvas.getContext('2d');ctx.drawImage(source,0,0);
  const layout=allocateLabels(result,canvas.width,canvas.height,(text,font)=>{ctx.font=`700 ${font}px system-ui`;return ctx.measureText(text).width;});
+ const replaced=g=>layout.drawn.some(l=>g.box.x0>=l.box.x0-.5&&g.box.x1<=l.box.x1+.5&&g.box.y0>=l.box.y0-.5&&g.box.y1<=l.box.y1+.5);
+ const preserved=result.lines.flatMap(l=>l.glyphs).filter(g=>!replaced(g)).map(g=>g.box);
+ // First clear the entire source word, independently of its new text position.
+ // Draw all backgrounds before any text, so no later mask erases a label.
  for(const label of layout.drawn){
-  const b=label.displayBox;ctx.fillStyle='#fff';ctx.fillRect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);
-  ctx.save();ctx.beginPath();ctx.rect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);ctx.clip();ctx.translate((b.x0+b.x1)/2,(b.y0+b.y1)/2);ctx.scale(label.horizontalScale,1);ctx.font=`700 ${label.fontSize}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#15212a';
+  const b=label.box,pad=2,sourceBox={x0:Math.max(0,b.x0-pad),x1:Math.min(canvas.width,b.x1+pad),y0:Math.max(0,b.y0-pad),y1:Math.min(canvas.height,b.y1+pad)};
+  label.eraseRegions=visibleRegions(sourceBox,preserved);label.textRegions=visibleRegions(label.displayBox,preserved);
+  ctx.fillStyle='#fff';for(const r of [...label.eraseRegions,...label.textRegions])ctx.fillRect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);
+ }
+ for(const label of layout.drawn){
+  const b=label.displayBox;ctx.save();ctx.beginPath();for(const r of label.textRegions)ctx.rect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);ctx.clip();ctx.translate((b.x0+b.x1)/2,(b.y0+b.y1)/2);ctx.scale(label.horizontalScale,1);ctx.font=`700 ${label.fontSize}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#15212a';
   label.rows.forEach((row,i)=>ctx.fillText(row,0,(i-(label.rows.length-1)/2)*label.fontSize));ctx.restore();
  }
  return layout;

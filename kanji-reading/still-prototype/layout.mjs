@@ -44,16 +44,17 @@ export function allocateLabels(result,width,height,measure,{minScale=.70}={}){
     continue;
    }
    const widths=items.map(i=>i.natural*scale+padding),total=widths.reduce((a,b)=>a+b,0)+gap*(items.length-1);
-   const center=(items[0].label.box.x0+items.at(-1).label.box.x1)/2;
-   let low=left,high=right-total,prefix=0;
-   for(let i=0;i<items.length;i++){low=Math.max(low,items[i].label.box.x0+1-prefix-widths[i]);high=Math.min(high,items[i].label.box.x1-1-prefix);prefix+=widths[i]+gap;}
-   let x=low<=high?Math.max(low,Math.min(center-total/2,high)):Math.max(left,Math.min(center-total/2,right-total));
+   // Keep each word at its own source center. Only move it when a neighbor
+   // needs room; do not compact a whole line into one centered text strip.
+   const positions=items.map((item,i)=>(item.label.box.x0+item.label.box.x1-widths[i])/2);
+   let edge=left;
+   for(let i=0;i<items.length;i++){positions[i]=Math.max(edge,positions[i]);edge=positions[i]+widths[i]+gap;}
+   edge=right;
+   for(let i=items.length-1;i>=0;i--){positions[i]=Math.min(positions[i],edge-widths[i]);edge=positions[i]-gap;}
    for(let i=0;i<items.length;i++){
-    const item=items[i],b=item.label.box,rect={x0:x,x1:x+widths[i],y0:Math.max(0,b.y0),y1:Math.min(height,b.y1)};
-    // Keep a visible overlap with the original word to preserve correspondence.
-    if(rect.x1<=b.x0||rect.x0>=b.x1)omitted.push({...item.label,reason:'source-anchor-displaced'});
+    const item=items[i],b=item.label.box,x=positions[i],rect={x0:x,x1:x+widths[i],y0:Math.max(0,b.y0),y1:Math.min(height,b.y1)};
+    if(rect.x0<left-.01||rect.x1>right+.01||rect.x1<=b.x0||rect.x0>=b.x1)omitted.push({...item.label,reason:'source-anchor-displaced'});
     else place(item.label,item.rows,item.font,scale,rect);
-    x+=widths[i]+gap;
    }
   }
  }
