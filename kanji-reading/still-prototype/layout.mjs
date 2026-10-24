@@ -34,7 +34,14 @@ export function allocateLabels(result,width,height,measure,{minScale=.70}={}){
     for(const option of options){if(required()<=available)break;const item=items[option.index];item.rows=option.split.rows;item.font=font*.82;item.natural=option.split.width;}
    }
    // Allocate in source order; a shared scale preserves typographic consistency.
-   const natural=items.reduce((n,i)=>n+i.natural,0),scale=Math.min(1,(available-padding*items.length-gap*(items.length-1))/Math.max(1,natural));
+   const natural=items.reduce((n,i)=>n+i.natural,0);let scale=Math.min(1,(available-padding*items.length-gap*(items.length-1))/Math.max(1,natural));
+   // A row may fit while early words push a short particle past its source.
+   function anchorBounds(s){
+    const bounds=[];let edge=left;
+    for(const item of items){const w=item.natural*s+padding,b=item.label.box,low=Math.max(edge,b.x0+1-w),high=Math.min(right-w,b.x1-1);if(low>high)return null;bounds.push({low,high});edge=low+w+gap;}
+    return bounds;
+   }
+   while(scale>=minScale&&!anchorBounds(scale)){if(scale===minScale){scale=minScale-.01;break;}scale=Math.max(minScale,scale-.01);}
    if(scale<minScale||group.some(c=>c.blocked)){
     // A crowded group must not suppress unrelated labels that still fit locally.
     for(const cell of group){const b=cell.label.box;const clipped={...b,x0:Math.max(b.x0,cell.left),x1:Math.min(b.x1,cell.right)};const w=clipped.x1-clipped.x0;const s=Math.min(1,(w-padding)/Math.max(1,measure(cell.label.output,font)));
@@ -46,11 +53,12 @@ export function allocateLabels(result,width,height,measure,{minScale=.70}={}){
    const widths=items.map(i=>i.natural*scale+padding),total=widths.reduce((a,b)=>a+b,0)+gap*(items.length-1);
    // Keep each word at its own source center. Only move it when a neighbor
    // needs room; do not compact a whole line into one centered text strip.
-   const positions=items.map((item,i)=>(item.label.box.x0+item.label.box.x1-widths[i])/2);
+   const bounds=anchorBounds(scale);
+   const positions=items.map((item,i)=>Math.max(bounds[i].low,Math.min(bounds[i].high,(item.label.box.x0+item.label.box.x1-widths[i])/2)));
    let edge=left;
    for(let i=0;i<items.length;i++){positions[i]=Math.max(edge,positions[i]);edge=positions[i]+widths[i]+gap;}
    edge=right;
-   for(let i=items.length-1;i>=0;i--){positions[i]=Math.min(positions[i],edge-widths[i]);edge=positions[i]-gap;}
+   for(let i=items.length-1;i>=0;i--){positions[i]=Math.min(positions[i],bounds[i].high,edge-widths[i]);edge=positions[i]-gap;}
    for(let i=0;i<items.length;i++){
     const item=items[i],b=item.label.box,x=positions[i],rect={x0:x,x1:x+widths[i],y0:Math.max(0,b.y0),y1:Math.min(height,b.y1)};
     if(rect.x0<left-.01||rect.x1>right+.01||rect.x1<=b.x0||rect.x0>=b.x1)omitted.push({...item.label,reason:'source-anchor-displaced'});

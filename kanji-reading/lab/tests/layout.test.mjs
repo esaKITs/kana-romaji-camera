@@ -11,3 +11,10 @@ test('impossible width is explicitly withheld, never over-compressed',()=>{const
 test('allocation is repeatable and input is immutable',()=>{const s=scene([['学校',20,80,'gakkoo']]);const before=JSON.stringify(s),a=allocateLabels(s,180,80,measure);assert.deepEqual(a,allocateLabels(s,180,80,measure));assert.equal(JSON.stringify(s),before);});
 test('overlapping OCR bounds are clipped to preserved neighboring glyphs',()=>{const s=scene([['3',0,22],['本',20,62,'bon'],['の',60,85]]);const r=allocateLabels(s,120,80,measure);assert.equal(r.drawn.length,1);assert.ok(r.drawn[0].displayBox.x0>22);assert.ok(r.drawn[0].displayBox.x1<60);});
 test('tight canvases and uneven words never produce out-of-bounds rectangles',()=>{for(const width of [45,80,120,240])for(const text of ['a','gakkoo','toshokan','juusambai']){const s=scene([['語',4,24,text],['語',25,44,'ga']]);const r=allocateLabels(s,width,60,measure);for(const l of r.drawn){assert.ok(l.displayBox.x0>=0&&l.displayBox.x1<=width);assert.ok(l.horizontalScale>=.7);}for(let i=0;i<r.drawn.length;i++)for(const other of r.drawn.slice(i+1))assert.ok(!overlap(r.drawn[i].displayBox,other.displayBox));}});
+test('row fitting cannot displace a short particle beyond its own source',()=>{
+ const s=scene([['語A',54,149,'long-a'],['語B',149,293,'long-b'],['に',294,340,'ni']]);
+ const widths={'long-a':159.26,'long-b':184.12,ni:32.35};
+ const r=allocateLabels(s,1100,80,text=>widths[text]??text.length*16);
+ assert.equal(r.drawn.length,3);assert.equal(r.omitted.length,0);
+ const particle=r.drawn.find(l=>l.source==='に');assert.ok(particle.displayBox.x0<340&&particle.displayBox.x1>294);assert.ok(particle.horizontalScale>=.7&&particle.horizontalScale<1);
+});
