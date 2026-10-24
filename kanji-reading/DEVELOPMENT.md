@@ -26,3 +26,10 @@ A new repository is preferred. This session's GitHub connector exposes no reposi
 - [Original 100 before/after](NUMERIC-BASE-100-RESULTS.md)
 - [Extra 80 + 20 guards](NUMERIC-EXTRA-100-RESULTS.md)
 - Main/public UI and final analyzer selection remain unchanged.
+
+## 2026-10-24 Still row allocation
+
+Added isolated row-space allocation in `still-prototype/layout.mjs`. The research
+renderer shares width between adjacent target words, protects preserved glyphs,
+compresses horizontally no further than 0.70, and tries two rows for long labels.
+See `STILL-LAYOUT-REPORT.md`. No production UI, engine selection, or deployment.

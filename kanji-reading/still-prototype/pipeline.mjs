@@ -1,3 +1,4 @@
+import {allocateLabels} from './layout.mjs';
 import {splitOkurigana,isHan,isTarget,modes,reviewReason} from '../lab/src/policy.mjs';
 import {candidateRomanization} from '../lab/src/format.mjs';
 import {romaji,rubyKanjiRomaji} from '../lab/generated/romanizer.mjs';
@@ -77,19 +78,11 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
 }
 export function renderResult(canvas,source,result){
  canvas.width=source.width;canvas.height=source.height;const ctx=canvas.getContext('2d');ctx.drawImage(source,0,0);
- const drawn=[],omitted=[],rects=[];
- for(const label of result.labels){
-  const b=label.box,w=b.x1-b.x0,h=b.y1-b.y0,line=result.lines.find(l=>l.id===label.lineId);
-  const font=(line?line.box.y1-line.box.y0:h)*.56;ctx.font=`700 ${font}px system-ui`;
-  const natural=ctx.measureText(label.output).width,other=line?.glyphs.filter(g=>g.box.x1<=b.x0+.5||g.box.x0>=b.x1-.5)||[];
-  const left=Math.min(b.x0,Math.max(4,...other.filter(g=>g.box.x1<=b.x0+.5).map(g=>g.box.x1+1)));
-  const right=Math.max(b.x1,Math.min(canvas.width-4,...other.filter(g=>g.box.x0>=b.x1-.5).map(g=>g.box.x0-1)));
-  const width=Math.max(w,Math.min(right-left,natural+4));
-  const x=Math.max(left,Math.min((b.x0+b.x1-width)/2,right-width)),scale=Math.min(1,(width-4)/Math.max(1,natural));
-  const rect={x0:x,y0:Math.max(0,b.y0-4),x1:x+width,y1:Math.min(canvas.height,b.y1+4)};
-  const collides=rects.some(q=>Math.min(q.x1,rect.x1)>Math.max(q.x0,rect.x0)&&Math.min(q.y1,rect.y1)>Math.max(q.y0,rect.y0));
-  if(scale<.70||collides){omitted.push({...label,displayBox:rect,horizontalScale:scale,reason:collides?'label-collision':'line-allocation-required'});continue;}
-  ctx.fillStyle='#fff';ctx.fillRect(rect.x0,rect.y0,width,rect.y1-rect.y0);ctx.save();ctx.translate(x+width/2,(b.y0+b.y1)/2);ctx.scale(scale,1);ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#15212a';ctx.fillText(label.output,0,0);ctx.restore();drawn.push({...label,displayBox:rect,horizontalScale:scale});rects.push(rect);
+ const layout=allocateLabels(result,canvas.width,canvas.height,(text,font)=>{ctx.font=`700 ${font}px system-ui`;return ctx.measureText(text).width;});
+ for(const label of layout.drawn){
+  const b=label.displayBox;ctx.fillStyle='#fff';ctx.fillRect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);
+  ctx.save();ctx.beginPath();ctx.rect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);ctx.clip();ctx.translate((b.x0+b.x1)/2,(b.y0+b.y1)/2);ctx.scale(label.horizontalScale,1);ctx.font=`700 ${label.fontSize}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#15212a';
+  label.rows.forEach((row,i)=>ctx.fillText(row,0,(i-(label.rows.length-1)/2)*label.fontSize));ctx.restore();
  }
- return {drawn,omitted};
+ return layout;
 }
