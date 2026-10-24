@@ -28,6 +28,7 @@ export function displayTokens(text,tokens,mode,pairs=[],{bulletEnd=null}={}){
   const p=last?.pos||[],q=token.pos||[];
   const verbChain=members.some(t=>t?.pos?.some(x=>x==='動詞'||x==='形容詞'));
   const attach=(p[0]==='接頭詞'&&q[0]!=='助詞')||
+   (p.includes('接続助詞')&&/^[てで]$/.test(last.surface)&&q.includes('動詞')&&q.some(v=>v.startsWith('非自立'))&&/^い/u.test(token.surface)&&/^イ/u.test(token.reading||''))||
    (verbChain&&(q[0]==='助動詞'||q[0]==='動詞'&&(q.includes('接尾')||q.includes('非自立'))||q.includes('接続助詞')&&/^[てで]$/.test(token.surface)))||
    (p[0]==='名詞'&&q[0]==='名詞'&&q.includes('接尾'))||
    (p.includes('サ変接続')&&q[0]==='動詞'&&/^(し|する|すれ|せ)$/.test(token.surface));
