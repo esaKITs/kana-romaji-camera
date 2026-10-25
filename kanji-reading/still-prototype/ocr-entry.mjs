@@ -19,16 +19,18 @@ async function scan(canvas,id){
 export async function analyzeText(text){return (await rpc({command:'analyze',text,numeric:true})).tokens;}
 export async function runStill(source,{mode='あア漢',style='double',output=null,paperState=null}={}){
  if(!ocr||!readingWorker)throw Error('Initialize first');
- const t=performance.now(),snapshot=await scan(source,'still-'+requestId),rubyChecks=[];
+ const t=performance.now(),snapshot=await scan(source,'still-'+requestId),ocrMs=performance.now()-t,rubyChecks=[];let rubyOcrMs=0;
  const result=await analyzeSnapshot(snapshot,async text=>(await rpc({command:'analyze',text,numeric:true})).tokens,{mode,style,verifyRuby:async c=>{
   const b=c.rubyBox,pad=4,scale=4,crop=document.createElement('canvas');
   const x=Math.max(0,b.x0-pad),y=Math.max(0,b.y0-pad),w=Math.min(source.width-x,b.x1-b.x0+pad*2),h=Math.min(source.height-y,b.y1-b.y0+pad*2),margin=80;
   crop.width=Math.ceil(w*scale)+margin*2;crop.height=Math.ceil(h*scale)+margin*2;
   const context=crop.getContext('2d');context.fillStyle='white';context.fillRect(0,0,crop.width,crop.height);context.drawImage(source,x,y,w,h,margin,margin,w*scale,h*scale);
-  const recheck=await scan(crop,'ruby-'+requestId),reading=recheck.lines.map(l=>l.glyphs.map(g=>g.text).join('')).join('').replace(/\s/g,'');rubyChecks.push({source:c.source,first:c.reading,second:reading});return reading;
+  const checkStart=performance.now(),recheck=await scan(crop,'ruby-'+requestId),reading=recheck.lines.map(l=>l.glyphs.map(g=>g.text).join('')).join('').replace(/\s/g,'');rubyOcrMs+=performance.now()-checkStart;rubyChecks.push({source:c.source,first:c.reading,second:reading});return reading;
  }});
- const rendering=output?renderResult(output,source,result,{paperState}):null;
- return {elapsedMs:performance.now()-t,rawText:snapshot.lines.map(l=>l.text).join('\n'),snapshot,result,rubyChecks,rendering};
+ const renderStart=performance.now(),rendering=output?renderResult(output,source,result,{paperState}):null;
+ const run={elapsedMs:performance.now()-t,rawText:snapshot.lines.map(l=>l.text).join('\n'),snapshot,result,rubyChecks,rendering,timings:{ocrMs,rubyOcrMs,analysisMs:renderStart-t-ocrMs-rubyOcrMs,renderMs:performance.now()-renderStart},jsHeapBytes:performance.memory?.usedJSHeapSize??null};
+ // Bounded, browser-local diagnostics. This is neither an upload nor persisted data.
+ window.stillLab.lastRun=run;return run;
 }
 export async function dispose(){readingWorker?.terminate();readingWorker=null;for(const p of waiting.values()){clearTimeout(p.timer);p.reject(Error('Disposed'));}waiting.clear();if(ocr)await ocr.dispose();ocr=null;}
 window.stillLab={initialize,runStill,dispose,analyzeSnapshot,renderResult,analyze:async text=>(await rpc({command:"analyze",text,numeric:true})).tokens};

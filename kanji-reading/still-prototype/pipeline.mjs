@@ -1,6 +1,7 @@
 import {sampledPaperColor,selectPapers,paperFor,foregroundFor} from './paper.mjs';
 import {displayTokens,openingBullet} from './display-tokens.mjs';
 import {allocateLabels} from './layout.mjs';
+import {normalizeRegions} from './regions.mjs';
 import {splitOkurigana,isHan,isTarget,modes,reviewReason} from '../lab/src/policy.mjs';
 import {candidateRomanization} from '../lab/src/format.mjs';
 import {romaji,rubyKanjiRomaji} from '../lab/generated/romanizer.mjs';
@@ -22,36 +23,47 @@ export function spanBox(line,start,end){
 }
 export function rubyCandidates(lines){
  const candidates=[];
- for(const main of lines)for(const match of main.text.matchAll(/[\p{Script=Han}々〆]+/gu)){
+ // OCR often joins consecutive annotated words into one Han run. Consider
+ // glyph-aligned subspans; uniqueness below rejects competing associations.
+ for(const main of lines)for(const run of main.text.matchAll(/[\p{Script=Han}々〆]+/gu)){
+ const boundaries=main.glyphs.filter(g=>g.start>=run.index&&g.end<=run.index+run[0].length);
+ for(let first=0;first<boundaries.length;first++)for(let last=first;last<Math.min(boundaries.length,first+16);last++){
+  const start=boundaries[first].start,end=boundaries[last].end,match={0:main.text.slice(start,end),index:start};
   const box=spanBox(main,match.index,match.index+match[0].length);if(!box)continue;
   const h=box.y1-box.y0,w=box.x1-box.x0;
   for(const ruby of lines){
    if(ruby===main||!/^[ぁ-ゖァ-ヺー]+$/u.test(ruby.text))continue;
    const q=ruby.box,rh=q.y1-q.y0,rw=q.x1-q.x0,overlap=Math.max(0,Math.min(q.x1,box.x1)-Math.max(q.x0,box.x0));
+   if(rw>w*2.4)continue;
    if(rh<h*.18||rh>h*.72||q.y1>box.y0+h*.12||box.y0-q.y1>h*.8)continue;
    if(overlap<Math.min(w,rw)*.7||overlap<w*.65||Math.abs((q.x0+q.x1-box.x0-box.x1)/2)>w*.25)continue;
    if(Math.min(...ruby.glyphs.map(g=>g.confidence??0))<.75)continue;
-   candidates.push({lineId:main.id,start:match.index,end:match.index+match[0].length,source:match[0],box,rubyLineId:ruby.id,rubyBox:q,reading:ruby.text});
+   const cover=union([box,q]);
+   // Do not erase an unrelated glyph between ruby and its proposed body.
+   if(lines.some(l=>l.glyphs.some(g=>!(l===ruby||l===main&&g.start>=start&&g.end<=end)&&Math.min(g.box.x1,cover.x1)>Math.max(g.box.x0,cover.x0)&&Math.min(g.box.y1,cover.y1)>Math.max(g.box.y0,cover.y0))))continue;
+   candidates.push({lineId:main.id,start,end,source:match[0],box,rubyLineId:ruby.id,rubyBox:q,reading:ruby.text});
   }
  }
+ }
  // Neither competing bodies nor competing ruby lines may be resolved by iteration order.
- return candidates.filter(c=>candidates.filter(x=>x.rubyLineId===c.rubyLineId).length===1&&candidates.filter(x=>x.lineId===c.lineId&&x.start===c.start&&x.end===c.end).length===1);
+ return candidates.filter(c=>candidates.filter(x=>x.rubyLineId===c.rubyLineId).length===1&&!candidates.some(x=>x!==c&&x.lineId===c.lineId&&x.start<c.end&&x.end>c.start));
 }
 export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='double',verifyRuby=async()=>null}={}){
  if(!modes.includes(mode))throw Error('Invalid mode');
- const lines=sourceLines(snapshot),pairs=[],candidates=rubyCandidates(lines);
+ const normalized=normalizeRegions(snapshot),lines=sourceLines(normalized),pairs=[],candidates=rubyCandidates(lines);
  for(const c of candidates){
   const reread=await verifyRuby(c);
   if(reread?.normalize('NFC')===c.reading.normalize('NFC'))pairs.push({...c,verified:true});
  }
- const consumedRuby=new Set(candidates.map(p=>p.rubyLineId)),labels=[],withheld=[],nonReading=[];
+ const consumedRuby=new Set(candidates.map(p=>p.rubyLineId)),labels=[],withheld=[],nonReading=[],analysis=[];
  for(const line of lines){
   if(consumedRuby.has(line.id))continue;
   const rawTokens=await analyze(line.text),candidate=openingBullet(line),bullet=candidate&&rawTokens.some(t=>t.start===0&&t.end===1)?candidate:null;
+  analysis.push({lineId:line.id,text:line.text,tokens:rawTokens});
   if(bullet)nonReading.push({...bullet,lineId:line.id});
   const tokens=displayTokens(line.text,rawTokens,mode,pairs.filter(p=>p.lineId===line.id),{bulletEnd:bullet?.end});
   for(const pair of pairs.filter(p=>p.lineId===line.id)){
-   labels.push({source:pair.source,reading:pair.reading,output:rubyKanjiRomaji(pair.reading,style),box:pair.box,lineId:line.id,readingSource:'verified-ruby',coversRuby:false});
+   labels.push({source:pair.source,reading:pair.reading,output:rubyKanjiRomaji(pair.reading,style),box:union([pair.box,pair.rubyBox]),bodyBox:pair.box,rubyBox:pair.rubyBox,lineId:line.id,readingSource:'verified-ruby',coversRuby:true});
   }
   for(const token of tokens){
    if(bullet&&token.start===0&&token.end===bullet.end)continue;
@@ -80,7 +92,7 @@ export async function analyzeSnapshot(snapshot,analyze,{mode='あア漢',style='
    }
   }
  }
- return {mode,style,lines:lines.map(l=>({id:l.id,text:l.text,box:l.box,glyphs:l.glyphs})),pairs,labels,withheld,nonReading};
+ return {mode,style,lines:lines.map(l=>({id:l.id,text:l.text,box:l.box,glyphs:l.glyphs})),pairs,labels,withheld,nonReading,analysis,regionDiagnostics:normalized.regionDiagnostics};
 }
 // Subtract preserved glyph rectangles from a background/text region.
 export function visibleRegions(box,obstacles){
