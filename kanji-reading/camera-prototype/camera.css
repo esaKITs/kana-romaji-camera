@@ -15,3 +15,7 @@ body.camera-active header{padding-left:max(12px,env(safe-area-inset-left));paddi
  body.camera-still header .topbar{padding-left:44px}
  body.camera-active #progress{top:48%;max-width:65%}
 }
+
+/* Gestures belong only to the Still image; controls remain outside this layer. */
+body.camera-still #zoom-layer{touch-action:none;user-select:none;-webkit-user-select:none}
+body.camera-still #stage{overflow:hidden}
